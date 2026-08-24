@@ -13,6 +13,7 @@ extras (vault/gpu-power-cap/newsdesks stay out; secrets are generated per-order,
 | agent-office-operator | own CatalogSource `agent-office-operator-catalog`, channel `alpha` | operators.yml (catalogsource.yml.j2 + subscription) | pin catalog image per release |
 | Red Hat Developer Hub + dynamic plugins + golden-path templates | cluster/rhdh + template repo | rhdh.yml | template repo fork for workshop (TODO: pin) |
 | Keycloak + realm + user1..N + per-user namespaces | new for workshop | keycloak_users.yml | replaces htpasswd pattern |
+| **Gitea (in-cluster git)** | Gitea operator (agnosticd pattern) | gitea.yml | attendee agent repos live in per-user Gitea namespaces via Keycloak OIDC; reference cluster keeps GitHub untouched |
 | AgentGateway class / skills catalog / Skill CRs | cluster/skills*, cluster/runtime | agent_platform.yml | subset: lab skills only |
 | Mattermost (agent chat) | cluster/mattermost | agent_platform.yml | needed for M1 first-contact |
 | MLflow | cluster/mlflow | optional flag, default off | only if M5+ uses it |

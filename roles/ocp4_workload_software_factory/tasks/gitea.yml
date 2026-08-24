@@ -1,0 +1,11 @@
+---
+# TODO(iteration-1): in-cluster Gitea for attendee agent repos.
+# - Install via the Gitea operator (agnosticd has existing gitea workload patterns to reuse).
+# - OIDC against the workshop Keycloak realm so user1..N sign in with the same SSO as the
+#   cluster, Developer Hub, and Mattermost; auto-provision per-user orgs/namespaces.
+# - Seed a service account for the scaffolder publish step and the ApplicationSet scan.
+# - The openclaw-agent template publishes here when git_provider == gitea (see agent-office
+#   change: parameterized publish step, owner = the logged-in user).
+- name: gitea stage placeholder
+  ansible.builtin.debug:
+    msg: "TODO: gitea"

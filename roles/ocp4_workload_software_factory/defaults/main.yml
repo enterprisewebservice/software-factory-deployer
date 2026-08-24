@@ -20,6 +20,12 @@ eso_channel: stable
 # Developer Hub
 rhdh_golden_path_template_repo: ""    # TODO: workshop fork of the openclaw-agent template (pin revision)
 
+# Git provider for attendee agent repos: in-cluster Gitea (per-user namespaces via Keycloak
+# OIDC). The reference cluster keeps its GitHub wiring; workshop clusters never touch it.
+git_provider: gitea
+gitea_namespace: gitea
+gitea_admin_user: opentlc-mgr
+
 # GitOps bootstrap
 gitops_bootstrap_repo: ""             # TODO: workshop-config repo (subset of agent-office/cluster)
 gitops_bootstrap_revision: main

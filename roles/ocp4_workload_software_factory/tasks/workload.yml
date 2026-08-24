@@ -2,6 +2,7 @@
 # Install order matters: operators → gitops bootstrap → RHOAI/MaaS → RHDH → identity/users →
 # agent platform → verify. Each stage gates on health before the next.
 - ansible.builtin.include_tasks: operators.yml
+- ansible.builtin.include_tasks: gitea.yml
 - ansible.builtin.include_tasks: gitops.yml
 - ansible.builtin.include_tasks: rhoai_maas.yml
 - ansible.builtin.include_tasks: rhdh.yml
