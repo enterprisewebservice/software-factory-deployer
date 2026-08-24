@@ -1,0 +1,27 @@
+# Shared, scoped ArgoCD AppProject for ALL Governed Agent Platform agents —
+# gitea flavor. Mirrors agent-office/cluster/agent-office-appproject.yaml
+# (the reference cluster's GitHub version) with sourceRepos pointed at the
+# in-cluster Gitea's per-user orgs. Shape verified live on salamander
+# 2026-08-24 (gitea-provider verification run).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: agent-office
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  description: Shared scoped project for all Governed Agent Platform agents.
+  sourceRepos:
+    # Attendee repos live in per-user orgs: <user><suffix>/<name>-agent-gitops.
+    - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*-agent-gitops.git'
+    - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*-autoresearch-gitops.git'
+  destinations:
+    - namespace: {{ ocp4_workload_software_factory_namespace }}
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'

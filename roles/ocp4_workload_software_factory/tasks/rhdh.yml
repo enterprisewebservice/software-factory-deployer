@@ -1,6 +1,25 @@
 ---
-# TODO(iteration-1, first test cluster): implement rhdh stage.
+# TODO(iteration-1, first test cluster): implement the rhdh INSTALL stage.
 # See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
-- name: "rhdh stage placeholder"
+#
+# The gitea-specific wiring is already concrete and waiting for the install
+# to exist around it:
+#   - templates/rhdh-app-config-gitea-fragment.yaml.j2 — integrations.gitea
+#     (credentials via {{ gitea_rhdh_secret_name }}, created by gitea.yml)
+#     + the catalog Location for the mirrored golden-path template. Merge
+#     into the app-config this stage renders when git_provider == gitea.
+#   - the dynamic-plugins list this stage renders must include
+#     {{ rhdh_gitea_scaffolder_plugin }} (publish:gitea is NOT in RHDH's
+#     bundled dist — github/gitlab only). The reference copy source,
+#     agent-office/cluster/rhdh/dynamic-plugins-configmap.yaml, already
+#     carries the entry.
+#   - rhdh_gitea_templates.yml (included below) mirrors the pinned template
+#     repo into Gitea with the two-default registration rewrite.
+# All three shapes were verified live on salamander 2026-08-24.
+- name: "rhdh stage placeholder (install)"
   ansible.builtin.debug:
-    msg: "TODO: rhdh"
+    msg: "TODO: rhdh install (operator, app-config from fragments, keycloak auth)"
+
+- name: rhdh | golden-path template mirror + registration rewrite (gitea)
+  ansible.builtin.include_tasks: rhdh_gitea_templates.yml
+  when: git_provider == 'gitea'

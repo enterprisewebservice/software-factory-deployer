@@ -1,0 +1,35 @@
+# app-config fragment the rhdh stage merges into the workshop Developer Hub
+# config when git_provider == gitea. Verified live against RHDH 1.9.2 on
+# salamander 2026-08-24 (publish:gitea + catalog:register from a gitea URL
+# both worked with exactly this shape).
+#
+# Credentials: GITEA_USERNAME / GITEA_PASSWORD come from the
+# {{ gitea_rhdh_secret_name }} Secret in the RHDH namespace (created by
+# gitea.yml), surfaced to the backstage-backend container as env vars —
+# same pattern as the reference cluster's rhdh-github-credentials.
+# publish:gitea hard-requires BOTH username and password in the
+# integration (checked in the action source, module v0.2.15).
+integrations:
+  gitea:
+    - host: {{ gitea_host }}
+      username: ${GITEA_USERNAME}
+      password: ${GITEA_PASSWORD}
+
+# The golden-path template, registered from the in-cluster mirror that
+# rhdh_gitea_templates.yml pushes (deployer-rewritten defaults). Only the
+# genesis template registers on workshop clusters — the standard
+# openclaw-agent template stays a reference-cluster (GitHub) surface.
+catalog:
+  locations:
+    - target: https://{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}/src/branch/main/samples/templates/openclaw-agent-genesis/template.yaml
+      type: url
+      rules:
+        - allow: [Template]
+
+# Companion dynamic-plugins entry (goes in the workshop's dynamic-plugins
+# ConfigMap, alongside the github module the reference cluster enables —
+# see agent-office/cluster/rhdh/dynamic-plugins-configmap.yaml, which is
+# the ground-truth copy source):
+#
+#   - package: "{{ rhdh_gitea_scaffolder_plugin }}"
+#     disabled: false
