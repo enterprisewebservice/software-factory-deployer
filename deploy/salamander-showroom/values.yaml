@@ -1,0 +1,23 @@
+# Showroom viewer on salamander (Milestone A: instructor-led). Rendered with
+# showroom/showroom-single-pod; apply via deploy/salamander-showroom/manifests.yaml.
+guid: dev01
+user: dean
+deployer:
+  domain: apps.salamander.aimlworkbench.com
+content:
+  repoUrl: https://github.com/enterprisewebservice/showroom-openshift-software-factory.git
+  repoRef: main
+  antoraPlaybook: site.yml
+  user_data: |
+    user: dean
+    password: "<your OpenShift password>"
+    openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
+    openshift_api_url: https://api.salamander.aimlworkbench.com:6443
+    devhub_url: https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com
+    gitops_url: https://openshift-gitops-server-openshift-gitops.apps.salamander.aimlworkbench.com
+    mattermost_url: https://mattermost-mattermost.apps.salamander.aimlworkbench.com
+    ocp_version: "4.21"
+terminal:
+  setup: "true"
+runtime_automation:
+  setup: "false"
