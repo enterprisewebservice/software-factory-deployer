@@ -9,6 +9,13 @@
 # same pattern as the reference cluster's rhdh-github-credentials.
 # publish:gitea hard-requires BOTH username and password in the
 # integration (checked in the action source, module v0.2.15).
+#
+# COEXISTENCE: this list MERGES alongside whatever github integration the
+# cluster carries — never replaces it. Likewise auth: the workshop
+# app-config keeps MULTIPLE sign-in providers (Keycloak/OIDC for
+# attendees AND GitHub — Backstage renders a multi-provider picker), so
+# GitHub-signed users keep the GitHub genesis path while attendees route
+# to Gitea per-hire (gitProvider: auto in the genesis template).
 integrations:
   gitea:
     - host: {{ gitea_host }}

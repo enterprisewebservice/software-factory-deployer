@@ -1,7 +1,9 @@
-# ApplicationSet — gitea flavor of agent-office/cluster/argocd-appset/
-# agent-office-appset.yaml (the reference cluster's GitHub scmProvider
-# version). Discovers attendee agent gitops repos in the in-cluster Gitea
-# and creates one ArgoCD Application per repo, race-free and declarative.
+# ApplicationSet — the gitea SIBLING of agent-office/cluster/argocd-appset/
+# agent-office-appset.yaml. Both providers run simultaneously: this appset
+# scans the in-cluster Gitea while the GitHub one (when installed) keeps
+# scanning enterprisewebservice — two ApplicationSets in parallel, neither
+# replaces the other. Discovers attendee agent gitops repos and creates one
+# ArgoCD Application per repo, race-free and declarative.
 #
 # WHY one generator per attendee org: Argo CD's gitea scmProvider lists
 # repos with ListOrgRepos (org-only — applicationset/services/scm_provider/
@@ -23,7 +25,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: agent-office-agents
+  name: agent-office-agents-gitea
   namespace: openshift-gitops
   labels:
     app.kubernetes.io/managed-by: software-factory-deployer

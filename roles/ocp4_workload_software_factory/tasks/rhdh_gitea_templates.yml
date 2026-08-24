@@ -1,13 +1,13 @@
 ---
 # Golden-path template registration, gitea flavor.
 #
-# ONE template file serves both providers: openclaw-agent-genesis carries
-# hidden gitProvider/giteaHost parameters whose DEFAULTS are the GitHub
-# reference path. Registering it on a gitea cluster = mirror the pinned
-# template repo into the in-cluster Gitea and flip exactly those two
-# defaults — nothing else. (This same transform was applied on a verify
-# branch for the salamander end-to-end run 2026-08-24, so the rewritten
-# artifact shape is the verified one.)
+# ONE template file serves both providers simultaneously: the genesis
+# template's hidden gitProvider parameter ships as 'auto' — the per-hire
+# verdict routes Keycloak-ingested attendees (keycloak.org/id annotation)
+# to Gitea and everyone else to GitHub. Registering on a gitea cluster =
+# mirror the pinned repo into the in-cluster Gitea and set exactly ONE
+# default — giteaHost — nothing else. (The rewritten-defaults artifact
+# shape is the one verified live on salamander 2026-08-24.)
 #
 # The mirror lives at {{ gitea_templates_org }}/{{ gitea_templates_repo }};
 # the catalog Location pointing at it ships statically in the rhdh stage's
@@ -67,23 +67,26 @@
     depth: 1
 
 # The registration-time rewrite — the ONLY delta vs the reference template.
-- name: rhdh gitea templates | flip gitProvider default to gitea
-  ansible.builtin.replace:
-    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
-    regexp: '^(\s+)default: github$'
-    replace: '\1default: gitea'
-
+# gitProvider stays 'auto': GitHub users on this cluster keep the GitHub
+# path; only Keycloak attendees route to Gitea.
 - name: rhdh gitea templates | point giteaHost default at this cluster
   ansible.builtin.replace:
     path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
     regexp: "^(\\s+)default: ''$"
     replace: "\\1default: '{{ gitea_host }}'"
 
-- name: rhdh gitea templates | verify the rewrite landed exactly once each
+- name: rhdh gitea templates | verify the rewrite landed exactly once
   ansible.builtin.command:
-    argv: [grep, -c, "default: gitea", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"]
+    argv: [grep, -c, "default: '{{ gitea_host }}'", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"]
   register: r_rewrite_check
   failed_when: r_rewrite_check.stdout != "1"
+  changed_when: false
+
+- name: rhdh gitea templates | verify gitProvider still ships as auto
+  ansible.builtin.command:
+    argv: [grep, -c, "default: auto", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"]
+  register: r_auto_check
+  failed_when: r_auto_check.stdout != "1"
   changed_when: false
 
 - name: rhdh gitea templates | push the mirror
@@ -91,7 +94,7 @@
     set -euo pipefail
     cd "{{ r_tpl_dir.path }}/src"
     git -c user.name="software-factory-deployer" -c user.email="deployer@{{ gitea_host }}" \
-      commit -am "workshop registration rewrite: gitProvider=gitea, giteaHost={{ gitea_host }}"
+      commit -am "workshop registration rewrite: giteaHost={{ gitea_host }} (gitProvider stays auto)"
     git push --force \
       "https://{{ gitea_admin_user }}:{{ r_gitea_token.json.sha1 }}@{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}.git" \
       HEAD:refs/heads/main

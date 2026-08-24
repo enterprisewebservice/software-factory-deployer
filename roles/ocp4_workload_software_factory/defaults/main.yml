@@ -20,9 +20,9 @@ eso_channel: stable
 # Developer Hub
 rhdh_namespace: rhdh
 # The golden-path template source. No workshop fork needed: the genesis
-# template is provider-conditional in place — rhdh_gitea_templates.yml
-# mirrors this repo@revision into the in-cluster Gitea and flips only the
-# two hidden defaults (gitProvider, giteaHost) at registration time.
+# template routes per-hire in place (gitProvider: auto) —
+# rhdh_gitea_templates.yml mirrors this repo@revision into the in-cluster
+# Gitea and sets exactly one default (giteaHost) at registration time.
 rhdh_golden_path_template_repo: "https://github.com/deanpeterson/tssc-dev-multi-ci.git"
 rhdh_golden_path_template_revision: devspaces-workspace-for-agents  # TODO: pin to a tag/sha per workshop release
 
@@ -30,10 +30,11 @@ rhdh_golden_path_template_revision: devspaces-workspace-for-agents  # TODO: pin 
 # publish:gitea and Argo CD's gitea scmProvider are org-only, so "the user's
 # namespace" is an org the attendee owns: <user><gitea_user_org_suffix>). The
 # reference cluster keeps its GitHub wiring; workshop clusters never touch it.
-# The openclaw-agent-genesis template carries hidden gitProvider/giteaHost/
-# giteaOrgSuffix parameters (defaults = GitHub); rhdh_gitea_templates.yml
-# rewrites those defaults at registration time — that rewrite is the ONLY
-# delta between the reference template and the workshop copy.
+# BOTH providers stay live simultaneously: the genesis template's hidden
+# gitProvider parameter ships as 'auto' (per-hire verdict — Keycloak-
+# ingested attendees route to Gitea, everyone else stays on GitHub), and
+# rhdh_gitea_templates.yml sets exactly ONE default at registration time
+# (giteaHost). Discovery is a SECOND ApplicationSet next to the GitHub one.
 git_provider: gitea
 gitea_namespace: gitea
 gitea_admin_user: opentlc-mgr

@@ -1,8 +1,8 @@
-# Shared, scoped ArgoCD AppProject for ALL Governed Agent Platform agents —
-# gitea flavor. Mirrors agent-office/cluster/agent-office-appproject.yaml
-# (the reference cluster's GitHub version) with sourceRepos pointed at the
-# in-cluster Gitea's per-user orgs. Shape verified live on salamander
-# 2026-08-24 (gitea-provider verification run).
+# Shared, scoped ArgoCD AppProject for ALL Governed Agent Platform agents.
+# Mirrors agent-office/cluster/agent-office-appproject.yaml with sourceRepos
+# as the UNION of both providers — GitHub org repos AND the in-cluster
+# Gitea's per-user orgs — because both publish paths stay live
+# simultaneously. Gitea shape verified live on salamander 2026-08-24.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -13,7 +13,10 @@ metadata:
 spec:
   description: Shared scoped project for all Governed Agent Platform agents.
   sourceRepos:
-    # Attendee repos live in per-user orgs: <user><suffix>/<name>-agent-gitops.
+    # GitHub side (reference-cluster contract, unchanged):
+    - 'https://github.com/enterprisewebservice/*-agent-gitops.git'
+    - 'https://github.com/enterprisewebservice/*-autoresearch-gitops.git'
+    # Gitea side — attendee repos in per-user orgs: <user><suffix>/<name>-agent-gitops.
     - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*-agent-gitops.git'
     - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*-autoresearch-gitops.git'
   destinations:
