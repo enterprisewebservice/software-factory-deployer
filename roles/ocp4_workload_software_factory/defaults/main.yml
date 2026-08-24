@@ -18,13 +18,37 @@ mcp_gateway_channel: preview
 eso_channel: stable
 
 # Developer Hub
-rhdh_golden_path_template_repo: ""    # TODO: workshop fork of the openclaw-agent template (pin revision)
+rhdh_namespace: rhdh
+# The golden-path template source. No workshop fork needed: the genesis
+# template routes per-hire in place (gitProvider: auto) —
+# rhdh_gitea_templates.yml mirrors this repo@revision into the in-cluster
+# Gitea and sets exactly one default (giteaHost) at registration time.
+rhdh_golden_path_template_repo: "https://github.com/deanpeterson/tssc-dev-multi-ci.git"
+rhdh_golden_path_template_revision: devspaces-workspace-for-agents  # TODO: pin to a tag/sha per workshop release
 
-# Git provider for attendee agent repos: in-cluster Gitea (per-user namespaces via Keycloak
-# OIDC). The reference cluster keeps its GitHub wiring; workshop clusters never touch it.
+# Git provider for attendee agent repos: in-cluster Gitea (per-user ORGS — both
+# publish:gitea and Argo CD's gitea scmProvider are org-only, so "the user's
+# namespace" is an org the attendee owns: <user><gitea_user_org_suffix>). The
+# reference cluster keeps its GitHub wiring; workshop clusters never touch it.
+# BOTH providers stay live simultaneously: the genesis template's hidden
+# gitProvider parameter ships as 'auto' (per-hire verdict — Keycloak-
+# ingested attendees route to Gitea, everyone else stays on GitHub), and
+# rhdh_gitea_templates.yml sets exactly ONE default at registration time
+# (giteaHost). Discovery is a SECOND ApplicationSet next to the GitHub one.
 git_provider: gitea
 gitea_namespace: gitea
 gitea_admin_user: opentlc-mgr
+gitea_host: ""                                  # gitea route host (no scheme); derived from the Route by gitea.yml when empty
+gitea_user_org_suffix: "-agents"                # org per attendee: user1-agents, user2-agents, …
+gitea_scm_secret_name: agent-office-gitea-scm   # token Secret (openshift-gitops) for the ApplicationSet gitea generators
+gitea_rhdh_secret_name: rhdh-gitea-credentials  # username/password Secret (RHDH ns) for publish:gitea
+gitea_templates_org: workshop-config            # org holding the deployer-rewritten template mirror
+gitea_templates_repo: software-templates
+# Gitea scaffolder actions module (publish:gitea). RHDH's bundled dist has no
+# gitea module (github/gitlab only — checked in the 1.9.2 image), so it loads
+# from the rhdh-plugin-export-overlays OCI registry; bs_1.45.3 matches the
+# stream the reference cluster's other OCI plugins already use.
+rhdh_gitea_scaffolder_plugin: "oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-plugin-scaffolder-backend-module-gitea:bs_1.45.3__0.2.15!backstage-plugin-scaffolder-backend-module-gitea"
 
 # GitOps bootstrap
 gitops_bootstrap_repo: ""             # TODO: workshop-config repo (subset of agent-office/cluster)

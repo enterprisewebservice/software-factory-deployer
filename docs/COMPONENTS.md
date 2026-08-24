@@ -11,9 +11,9 @@ extras (vault/gpu-power-cap/newsdesks stay out; secrets are generated per-order,
 | External Secrets Operator | community-operators, `stable` | operators.yml | as reference cluster |
 | MCP Gateway operator | redhat-operators, `preview` | operators.yml | as reference cluster (`mcp-gateway`) |
 | agent-office-operator | own CatalogSource `agent-office-operator-catalog`, channel `alpha` | operators.yml (catalogsource.yml.j2 + subscription) | pin catalog image per release |
-| Red Hat Developer Hub + dynamic plugins + golden-path templates | cluster/rhdh + template repo | rhdh.yml | template repo fork for workshop (TODO: pin) |
+| Red Hat Developer Hub + dynamic plugins + golden-path templates | cluster/rhdh + template repo | rhdh.yml | no fork: genesis template is provider-conditional (hidden gitProvider/giteaHost defaults); rhdh_gitea_templates.yml mirrors the pinned repo into Gitea and flips just those defaults. Needs the gitea scaffolder dynamic plugin (not in RHDH dist). Verified live on salamander 2026-08-24 |
 | Keycloak + realm + user1..N + per-user namespaces | new for workshop | keycloak_users.yml | replaces htpasswd pattern |
-| **Gitea (in-cluster git)** | Gitea operator (agnosticd pattern) | gitea.yml | attendee agent repos live in per-user Gitea namespaces via Keycloak OIDC; reference cluster keeps GitHub untouched |
+| **Gitea (in-cluster git)** | Gitea operator (agnosticd pattern) | gitea.yml | attendee repos live in per-user Gitea ORGS (`<user>-agents` — publish:gitea and Argo's gitea scmProvider are both org-only, so orgs are how per-user namespaces are spelled); gitea.yml configures users/orgs/tokens/Secrets + the gitea AppProject/ApplicationSet (all verified live on salamander 2026-08-24); operator install + Keycloak OIDC auth source still TODO; reference cluster keeps GitHub untouched |
 | AgentGateway class / skills catalog / Skill CRs | cluster/skills*, cluster/runtime | agent_platform.yml | subset: lab skills only |
 | Mattermost (agent chat) | cluster/mattermost | agent_platform.yml | needed for M1 first-contact |
 | MLflow | cluster/mlflow | optional flag, default off | only if M5+ uses it |

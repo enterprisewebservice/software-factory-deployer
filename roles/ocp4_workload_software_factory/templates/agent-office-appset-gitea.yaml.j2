@@ -1,0 +1,74 @@
+# ApplicationSet — the gitea SIBLING of agent-office/cluster/argocd-appset/
+# agent-office-appset.yaml. Both providers run simultaneously: this appset
+# scans the in-cluster Gitea while the GitHub one (when installed) keeps
+# scanning enterprisewebservice — two ApplicationSets in parallel, neither
+# replaces the other. Discovers attendee agent gitops repos and creates one
+# ArgoCD Application per repo, race-free and declarative.
+#
+# WHY one generator per attendee org: Argo CD's gitea scmProvider lists
+# repos with ListOrgRepos (org-only — applicationset/services/scm_provider/
+# gitea.go, checked at v3.4.5 and master), and Backstage's publish:gitea
+# only creates repos in pre-existing orgs. So "each attendee's own
+# namespace" is spelled as a per-user org (<user><suffix>, created by
+# gitea.yml), and discovery is the union of per-org generators below.
+#
+# SCOPING: pathsExist keeps the marker-file contract — only repos carrying
+# argocd/applicationset-managed are adopted (RepoHasPath is implemented for
+# gitea). App names are org-prefixed ({{ '{{ .organization }}' }}-…) and
+# MUST match the argoAppName the openclaw-agent-genesis template renders
+# into catalog-info.yaml/application.yaml, so two attendees can both hire
+# a "morgan" without colliding.
+#
+# Shape verified live on salamander 2026-08-24: publish → discovery ~1min
+# → Synced/Healthy → AgentWorkstation Running; repo delete → app pruned
+# ~48s → AW removed.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agent-office-agents-gitea
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+{% for n in range(1, num_users | int + 1) %}
+    - scmProvider:
+        gitea:
+          owner: {{ keycloak_user_prefix }}{{ n }}{{ gitea_user_org_suffix }}
+          api: https://{{ gitea_host }}
+          tokenRef:
+            secretName: {{ gitea_scm_secret_name }}
+            key: token
+        cloneProtocol: https
+        # Re-scan quickly so newly-published agent repos get an app
+        # within ~1 min (default is 30 min).
+        requeueAfterSeconds: 60
+        filters:
+          - repositoryMatch: '.*-(agent|autoresearch)-gitops$'
+            pathsExist: ['argocd/applicationset-managed']
+{% endfor %}
+  template:
+    metadata:
+      name: '{{ '{{ .organization }}' }}-{{ '{{ trimSuffix "-gitops" .repository }}' }}'
+      labels:
+        app.kubernetes.io/managed-by: agent-office-applicationset
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: agent-office
+      source:
+        repoURL: '{{ '{{ .url }}' }}'
+        targetRevision: '{{ '{{ .branch }}' }}'
+        path: overlays/development
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: {{ ocp4_workload_software_factory_namespace }}
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

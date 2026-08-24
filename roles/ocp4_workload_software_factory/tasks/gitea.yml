@@ -1,11 +1,151 @@
 ---
-# TODO(iteration-1): in-cluster Gitea for attendee agent repos.
-# - Install via the Gitea operator (agnosticd has existing gitea workload patterns to reuse).
-# - OIDC against the workshop Keycloak realm so user1..N sign in with the same SSO as the
-#   cluster, Developer Hub, and Mattermost; auto-provision per-user orgs/namespaces.
-# - Seed a service account for the scaffolder publish step and the ApplicationSet scan.
-# - The openclaw-agent template publishes here when git_provider == gitea (see agent-office
-#   change: parameterized publish step, owner = the logged-in user).
-- name: gitea stage placeholder
-  ansible.builtin.debug:
-    msg: "TODO: gitea"
+# In-cluster Gitea for attendee agent repos.
+#
+# TODO(iteration-1): the INSTALL itself — Gitea operator (agnosticd has
+# existing gitea workload patterns to reuse) and, with it, the Keycloak
+# OIDC auth source so user1..N sign in with the same SSO as the cluster,
+# Developer Hub, and Mattermost. Until that lands, users are created as
+# local Gitea accounts sharing the per-order workshop password; flipping
+# them to the OIDC source is part of the operator install task.
+#
+# Everything below CONFIGURES the agent-platform contract on top of an
+# installed Gitea. The shapes were verified live end to end on salamander
+# 2026-08-24 (gitea-provider verification run): publish:gitea into a
+# per-user org → ApplicationSet discovery (~1 min) → Synced/Healthy →
+# AgentWorkstation Running; repo delete → Application pruned (~48 s).
+#
+# Contract created here, consumed by the openclaw-agent-genesis template
+# and the gitea ApplicationSet:
+#   - one org per attendee, named <user><gitea_user_org_suffix>, owned by
+#     that attendee (publish:gitea refuses to create orgs, and an org can
+#     never share a name with its owning user — hence the suffix);
+#   - {{ gitea_rhdh_secret_name }} in the RHDH namespace
+#     (GITEA_USERNAME/GITEA_PASSWORD) for the publish:gitea integration;
+#   - {{ gitea_scm_secret_name }} in openshift-gitops (key: token) for the
+#     ApplicationSet's per-org gitea scmProvider generators;
+#   - the agent-office AppProject + agent-office-agents ApplicationSet
+#     (gitea flavor of the reference cluster's manifests).
+
+- name: gitea | fail fast when the install prerequisite is missing
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    name: gitea
+    namespace: "{{ gitea_namespace }}"
+  register: r_gitea_route
+  failed_when: r_gitea_route.resources | length == 0
+
+- name: gitea | derive gitea_host from the Route when unset
+  ansible.builtin.set_fact:
+    gitea_host: "{{ r_gitea_route.resources[0].spec.host }}"
+  when: gitea_host | length == 0
+
+- name: gitea | read admin credentials (created by the install)
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: gitea-admin-credentials
+    namespace: "{{ gitea_namespace }}"
+  register: r_gitea_admin
+  failed_when: r_gitea_admin.resources | length == 0
+
+- name: gitea | set admin auth facts
+  ansible.builtin.set_fact:
+    _gitea_api: "https://{{ gitea_host }}/api/v1"
+    _gitea_admin_password: "{{ r_gitea_admin.resources[0].data.password | b64decode }}"
+  no_log: true
+
+- name: gitea | ensure per-attendee users exist
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      username: "{{ keycloak_user_prefix }}{{ item }}"
+      email: "{{ keycloak_user_prefix }}{{ item }}@{{ gitea_host }}"
+      password: "{{ keycloak_user_password }}"
+      must_change_password: false
+    status_code: [201, 422] # 422 = already exists (idempotent re-run)
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  no_log: true
+
+- name: gitea | ensure per-attendee orgs exist, owned by the attendee
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users/{{ keycloak_user_prefix }}{{ item }}/orgs"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      username: "{{ keycloak_user_prefix }}{{ item }}{{ gitea_user_org_suffix }}"
+      visibility: public
+    status_code: [201, 422]
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  no_log: true
+
+# One admin token serves both consumers (publish runs as the platform, not
+# the attendee — same trust model as the reference cluster's GitHub App).
+- name: gitea | mint the platform API token (recreate to stay idempotent)
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens/agent-platform"
+    method: DELETE
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [204, 404]
+  no_log: true
+
+- name: gitea | create the platform API token
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: agent-platform
+      scopes: ["all"]
+    status_code: [201]
+  register: r_gitea_token
+  no_log: true
+
+- name: gitea | publish credentials Secret for RHDH (publish:gitea integration)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ gitea_rhdh_secret_name }}"
+        namespace: "{{ rhdh_namespace | default('rhdh') }}"
+      type: Opaque
+      stringData:
+        GITEA_USERNAME: "{{ gitea_admin_user }}"
+        GITEA_PASSWORD: "{{ r_gitea_token.json.sha1 }}"
+  no_log: true
+
+- name: gitea | scm token Secret for the ApplicationSet generators
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ gitea_scm_secret_name }}"
+        namespace: openshift-gitops
+      type: Opaque
+      stringData:
+        token: "{{ r_gitea_token.json.sha1 }}"
+  no_log: true
+
+- name: gitea | agent-office AppProject + ApplicationSet (gitea flavor)
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', item) | from_yaml }}"
+  loop:
+    - agent-office-appproject-gitea.yaml.j2
+    - agent-office-appset-gitea.yaml.j2
