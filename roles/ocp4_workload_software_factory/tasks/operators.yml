@@ -1,0 +1,23 @@
+---
+# Operator installs. Channels/sources mirror the reference cluster (agent-office/cluster/*).
+- name: agent-office-operator CatalogSource
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'catalogsource.yml.j2') | from_yaml }}"
+  when: agent_office_catalog_image | length > 0
+
+- name: Operator subscriptions
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'subscription.yml.j2') | from_yaml }}"
+  loop:
+    - { name: openshift-gitops-operator, ns: openshift-operators, source: redhat-operators, channel: latest }
+    - { name: openshift-pipelines-operator-rh, ns: openshift-operators, source: redhat-operators, channel: latest }
+    - { name: rhods-operator, ns: redhat-ods-operator, source: redhat-operators, channel: stable }
+    - { name: external-secrets-operator, ns: openshift-operators, source: community-operators, channel: "{{ eso_channel }}" }
+    - { name: mcp-gateway, ns: openshift-operators, source: redhat-operators, channel: "{{ mcp_gateway_channel }}" }
+    - { name: agent-office-operator, ns: openshift-operators, source: agent-office-operator-catalog, channel: "{{ agent_office_channel }}" }
+  loop_control: { label: "{{ item.name }}" }
+
+- name: Wait for operator CSVs to succeed
+  ansible.builtin.include_tasks: wait_for_csv.yml
+  loop: [openshift-gitops-operator, openshift-pipelines-operator-rh, rhods-operator, agent-office-operator]
+  loop_control: { loop_var: csv_operator }

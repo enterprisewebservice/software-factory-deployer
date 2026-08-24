@@ -1,0 +1,6 @@
+---
+# TODO(iteration-1, first test cluster): implement keycloak_users stage.
+# See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
+- name: "keycloak_users stage placeholder"
+  ansible.builtin.debug:
+    msg: "TODO: keycloak_users"

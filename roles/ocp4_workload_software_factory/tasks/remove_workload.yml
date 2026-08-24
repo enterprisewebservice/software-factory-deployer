@@ -1,0 +1,6 @@
+---
+# TODO: teardown (reverse order). For RHDP sandbox lifecycles, destroy-with-cluster is acceptable
+# initially; explicit removal matters only for shared-cluster deployments.
+- name: Remove placeholder
+  ansible.builtin.debug:
+    msg: "TODO: remove_workload"

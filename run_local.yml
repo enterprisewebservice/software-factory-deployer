@@ -1,0 +1,7 @@
+---
+# Iteration loop: run the workload against the cluster in your current KUBECONFIG.
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - ocp4_workload_software_factory

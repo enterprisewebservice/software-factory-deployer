@@ -1,0 +1,4 @@
+---
+- name: Run workload tasks for ACTION={{ ACTION }}
+  ansible.builtin.include_tasks: "{{ item }}"
+  loop: "{{ ['pre_workload.yml', 'workload.yml', 'post_workload.yml'] if ACTION == 'provision' else ['remove_workload.yml'] }}"

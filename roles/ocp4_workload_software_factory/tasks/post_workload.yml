@@ -1,0 +1,4 @@
+---
+- name: Workload complete
+  ansible.builtin.debug:
+    msg: "software-factory workload provisioned (users: {{ num_users }}, model access: {{ model_access }})"

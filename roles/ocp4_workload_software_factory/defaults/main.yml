@@ -1,0 +1,30 @@
+---
+# ocp4_workload_software_factory — defaults
+ACTION: provision
+num_users: 5
+ocp4_workload_software_factory_namespace: agent-office
+
+# Model access: attendees' agents consume models via OpenShift AI Models-as-a-Service.
+model_access: maas                    # maas (only supported mode today)
+maas_external_provider_url: ""        # external model endpoint MaaS brokers (from RHDP attrs/secret)
+maas_external_provider_secret: ""     # per-order secret name carrying the provider key (never in git)
+sovereign_vllm: false                 # also serve an in-cluster model and register it in MaaS (M7)
+sovereign_vllm_model: ""              # model id when sovereign_vllm is true (GPU node required)
+
+# agent-office operator (values from the reference cluster)
+agent_office_catalog_image: ""        # TODO pin: quay.io/deanpeterson/agent-office-operator-catalog:<tag>
+agent_office_channel: alpha
+mcp_gateway_channel: preview
+eso_channel: stable
+
+# Developer Hub
+rhdh_golden_path_template_repo: ""    # TODO: workshop fork of the openclaw-agent template (pin revision)
+
+# GitOps bootstrap
+gitops_bootstrap_repo: ""             # TODO: workshop-config repo (subset of agent-office/cluster)
+gitops_bootstrap_revision: main
+
+# Keycloak
+keycloak_realm: workshop
+keycloak_user_prefix: user
+keycloak_user_password: ""            # generated per-order (lookup('password', ...)) — never static

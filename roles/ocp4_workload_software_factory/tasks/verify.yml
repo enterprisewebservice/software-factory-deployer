@@ -1,0 +1,6 @@
+---
+# TODO(iteration-1, first test cluster): implement verify stage.
+# See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
+- name: "verify stage placeholder"
+  ansible.builtin.debug:
+    msg: "TODO: verify"

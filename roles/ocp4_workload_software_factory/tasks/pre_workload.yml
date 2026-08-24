@@ -1,0 +1,11 @@
+---
+- name: Verify cluster is reachable and collect version
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: ClusterVersion
+    name: version
+  register: r_cv
+- name: Assert supported OpenShift version
+  ansible.builtin.assert:
+    that: r_cv.resources | length == 1
+    fail_msg: "Cluster not reachable with current credentials"
