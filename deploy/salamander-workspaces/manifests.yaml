@@ -1,0 +1,288 @@
+# Per-seat agent workspaces (Dean, 2026-08-25: "they will need a workspace
+# with their username in it"). One namespace per attendee, <user>-agent-workspace:
+#   * labeled for OpenShift GitOps management (the instance gets RBAC there,
+#     so the per-org ApplicationSet can deploy attendee agent repos into it);
+#   * RoleBinding: the attendee administers their own workspace (watch pods,
+#     read logs — Module 2/3 beats — without seeing anyone else's);
+#   * ExternalSecret: the workspace-local copy of the Codex subscription
+#     credential that a hire's own AgentGateway mounts
+#     (codexCredentialsSecretRef is namespace-local). Synced from the same
+#     Vault path as agent-office's copy, so a Dev Hub re-auth heals every
+#     workspace at once.
+# Scaling seats = appending a block; the keycloak_users stage generates the
+# same shape on workshop clusters.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user1-agent-workspace
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    software-factory.redhat.com/seat: user1
+    app.kubernetes.io/managed-by: software-factory-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user1-workspace-admin
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: user1
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: codex-subscription-credentials
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: codex-subscription-credentials
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          agentoffice.ai/credential: codex-subscription
+          app.kubernetes.io/managed-by: software-factory-deployer
+  data:
+    - secretKey: auth.json
+      remoteRef:
+        key: codex-subscription-credentials
+        property: auth.json
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user2-agent-workspace
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    software-factory.redhat.com/seat: user2
+    app.kubernetes.io/managed-by: software-factory-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user2-workspace-admin
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: user2
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: codex-subscription-credentials
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: codex-subscription-credentials
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          agentoffice.ai/credential: codex-subscription
+          app.kubernetes.io/managed-by: software-factory-deployer
+  data:
+    - secretKey: auth.json
+      remoteRef:
+        key: codex-subscription-credentials
+        property: auth.json
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user3-agent-workspace
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    software-factory.redhat.com/seat: user3
+    app.kubernetes.io/managed-by: software-factory-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user3-workspace-admin
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: user3
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: codex-subscription-credentials
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: codex-subscription-credentials
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          agentoffice.ai/credential: codex-subscription
+          app.kubernetes.io/managed-by: software-factory-deployer
+  data:
+    - secretKey: auth.json
+      remoteRef:
+        key: codex-subscription-credentials
+        property: auth.json
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user4-agent-workspace
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    software-factory.redhat.com/seat: user4
+    app.kubernetes.io/managed-by: software-factory-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user4-workspace-admin
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: user4
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: codex-subscription-credentials
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: codex-subscription-credentials
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          agentoffice.ai/credential: codex-subscription
+          app.kubernetes.io/managed-by: software-factory-deployer
+  data:
+    - secretKey: auth.json
+      remoteRef:
+        key: codex-subscription-credentials
+        property: auth.json
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user5-agent-workspace
+  labels:
+    argocd.argoproj.io/managed-by: openshift-gitops
+    software-factory.redhat.com/seat: user5
+    app.kubernetes.io/managed-by: software-factory-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user5-workspace-admin
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: user5
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: codex-subscription-credentials
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: codex-subscription-credentials
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          agentoffice.ai/credential: codex-subscription
+          app.kubernetes.io/managed-by: software-factory-deployer
+  data:
+    - secretKey: auth.json
+      remoteRef:
+        key: codex-subscription-credentials
+        property: auth.json

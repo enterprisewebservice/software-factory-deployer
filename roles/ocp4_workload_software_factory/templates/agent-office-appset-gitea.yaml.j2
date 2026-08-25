@@ -64,7 +64,11 @@ spec:
         path: overlays/development
       destination:
         server: https://kubernetes.default.svc
-        namespace: {{ ocp4_workload_software_factory_namespace }}
+        # The attendee's own workspace: org user1-agents -> namespace
+        # user1-agent-workspace. The repo's kustomization pins the same
+        # namespace on every resource; this keeps app-level defaults and
+        # the AppProject destination check aligned with it.
+        namespace: '{{ '{{ trimSuffix "' }}{{ gitea_user_org_suffix }}{{ '" .organization }}' }}-agent-workspace'
       syncPolicy:
         automated:
           prune: true

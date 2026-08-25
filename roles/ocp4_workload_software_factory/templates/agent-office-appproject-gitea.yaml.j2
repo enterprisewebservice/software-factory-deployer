@@ -22,6 +22,11 @@ spec:
   destinations:
     - namespace: {{ ocp4_workload_software_factory_namespace }}
       server: https://kubernetes.default.svc
+    # Attendee agent workspaces — one namespace per seat (see
+    # deploy/salamander-workspaces): a hire's whole gitops repo (agent +
+    # its own gateway) deploys into the attendee's namespace.
+    - namespace: '*-agent-workspace'
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: '*'
       kind: '*'
