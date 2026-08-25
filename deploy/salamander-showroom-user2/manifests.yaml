@@ -1,6 +1,13 @@
 # Seat user2's Showroom — rendered from deploy/salamander-showroom with the
 # release token and user_data re-seated (the per-seat model: one instance
 # per attendee, each built with its own identity at pod start).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: showroom-user2
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+---
 ---
 # Source: showroom-single-pod/templates/terminal/serviceaccount.yaml
 apiVersion: v1
