@@ -66,14 +66,29 @@
     version: "{{ rhdh_golden_path_template_revision }}"
     depth: 1
 
-# The registration-time rewrite — the ONLY delta vs the reference template.
-# gitProvider stays 'auto': GitHub users on this cluster keep the GitHub
-# path; only Keycloak attendees route to Gitea.
+# The registration-time rewrite — three deltas vs the reference template:
+# giteaHost points at this cluster, gitProvider comes back to 'auto'
+# (the reference copy ships github-only since 2026-08-25: with no
+# giteaHost, a flaky step-if once fired the gitea publish with an empty
+# host), and the mirror takes the plain "OpenClaw Agent" title so the
+# guide's instruction matches exactly one attendee-facing entry.
 - name: rhdh gitea templates | point giteaHost default at this cluster
   ansible.builtin.replace:
     path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
     regexp: "^(\\s+)default: ''$"
     replace: "\\1default: '{{ gitea_host }}'"
+
+- name: rhdh gitea templates | restore gitProvider auto-routing on this mirror
+  ansible.builtin.replace:
+    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
+    regexp: "^(\\s+)default: github$"
+    replace: "\\1default: auto"
+
+- name: rhdh gitea templates | mirror takes the plain attendee-facing title
+  ansible.builtin.replace:
+    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
+    regexp: "^  title: OpenClaw Agent \\(GitHub direct\\)$"
+    replace: "  title: OpenClaw Agent"
 
 - name: rhdh gitea templates | verify the rewrite landed exactly once
   ansible.builtin.command:
