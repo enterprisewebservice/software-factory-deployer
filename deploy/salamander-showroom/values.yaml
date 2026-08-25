@@ -7,7 +7,10 @@ guid: dev01
 # is seat user1 — user1..user5 exist in Keycloak (attendees), Gitea (with
 # <user>-agents orgs), and OpenShift (htpasswd IdP "workshop", non-admin).
 # The password is NEVER baked into the page on salamander (public route);
-# RHDP builds inject the real generated seat password here.
+# RHDP builds inject the real generated seat password here. Placeholder
+# values must be plain words — angle brackets ("<...>") reach the built
+# HTML unescaped and browsers swallow them as tags, rendering NOTHING
+# (a copyable 'oc login -u user1 -p  <url>' bug, found live 2026-08-25).
 user: user1
 deployer:
   domain: apps.salamander.aimlworkbench.com
@@ -17,7 +20,7 @@ content:
   antoraPlaybook: site.yml
   user_data: |
     user: user1
-    password: "<workshop password>"
+    password: ask-your-instructor
     openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
     openshift_api_url: https://api.salamander.aimlworkbench.com:6443
     devhub_url: https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com

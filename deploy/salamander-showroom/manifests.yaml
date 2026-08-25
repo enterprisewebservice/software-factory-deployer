@@ -103,7 +103,7 @@ metadata:
 data:
   user_data.yml: |
     user: user1
-    password: "<workshop password>"
+    password: ask-your-instructor
     openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
     openshift_api_url: https://api.salamander.aimlworkbench.com:6443
     devhub_url: https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com
