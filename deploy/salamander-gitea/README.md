@@ -23,3 +23,7 @@ Three things make it work, all of which the workshop stages must encode:
    `userN` (attendees group) instead of prompting "account already exists". Bound to the **gitea
    IdP only** — GitHub keeps the default confirm-link flow, since GitHub usernames are not ours
    to trust for silent linking.
+4. **Issuer has no trailing slash**: the Keycloak IdP `config.issuer` must be
+   `https://gitea-…com` exactly as Gitea's discovery document states it — Gitea's ROOT_URL ends
+   with `/` but its token `iss` claim does not. A trailing slash fails first-login with
+   "Wrong issuer from token" after an otherwise-successful token exchange.
