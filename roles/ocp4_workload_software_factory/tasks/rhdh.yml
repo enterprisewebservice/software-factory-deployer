@@ -15,7 +15,18 @@
 #     carries the entry.
 #   - rhdh_gitea_templates.yml (included below) mirrors the pinned template
 #     repo into Gitea with the two-default registration rewrite.
-# All three shapes were verified live on salamander 2026-08-24.
+#   - RBAC / catalog isolation (verified live 2026-08-25): app-config gets
+#     permission.enabled=true + permission.rbac (superUsers = the platform
+#     owner; policies-csv-file + conditionalPoliciesFile + policyFileReload
+#     pointing at /opt/app-root/src/rbac/), a ConfigMap with the policy
+#     files mounted there, and the backstage-community-plugin-rbac frontend
+#     plugin enabled. Reference copy: agent-office/cluster/rhdh/
+#     rbac-policies-configmap.yaml — role:default/attendee bound to
+#     group:default/attendees with conditional catalog read ($ownerRefs +
+#     shared kinds). Without this, every attendee sees the whole catalog.
+#     Attendees must exist in the catalog BEFORE doors open (keycloak_users
+#     stage + keycloakOrg ingestion tick) or first sign-ins fail to resolve.
+# All shapes were verified live on salamander 2026-08-24/25.
 - name: "rhdh stage placeholder (install)"
   ansible.builtin.debug:
     msg: "TODO: rhdh install (operator, app-config from fragments, keycloak auth)"
