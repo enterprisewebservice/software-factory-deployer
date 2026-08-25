@@ -21,6 +21,8 @@ data:
           entryPoints:
             - web
           service: showroom
+          middlewares:
+            - guide-no-cache
           priority: 1
         terminal:
           rule: "PathPrefix(`/terminal`)"
@@ -51,6 +53,15 @@ data:
             servers:
               - url: "http://127.0.0.1:8001"
       middlewares:
+        # Guide content must always revalidate: the nookbag viewer fetches
+        # module HTML that is otherwise served cache-control:private with no
+        # max-age, and browser heuristic caching keeps attendees on stale
+        # pages after content updates. no-cache still allows 304 revalidation,
+        # so rebuilds become visible on a plain reload.
+        guide-no-cache:
+          headers:
+            customResponseHeaders:
+              Cache-Control: "no-cache"
         terminal-stripprefix:
           stripPrefix:
             prefixes:
