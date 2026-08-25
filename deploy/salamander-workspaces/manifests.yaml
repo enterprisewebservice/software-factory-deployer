@@ -630,3 +630,160 @@ subjects:
   - kind: ServiceAccount
     name: mm-bridge
     namespace: agent-office
+
+# Seat git credentials, Vault-backed (2026-08-25): the same lifecycle the
+# platform's GitHub App identity uses — Vault is the source of truth,
+# External Secrets Operator syncs each seat's token into its workspace
+# every minute, the operator mounts it into the runtime, Reloader rolls
+# the gateway when it rotates, and the nightly rotator CronJob (ns gitea)
+# re-mints it. Module 3 walks this chain hop by hop.
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: user1-gitea-token
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: user1-gitea-token
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: software-factory-deployer
+          software-factory.redhat.com/seat: user1
+  data:
+    - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user1-gitea-token
+        property: GITEA_TOKEN
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: user2-gitea-token
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: user2-gitea-token
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: software-factory-deployer
+          software-factory.redhat.com/seat: user2
+  data:
+    - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user2-gitea-token
+        property: GITEA_TOKEN
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: user3-gitea-token
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: user3-gitea-token
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: software-factory-deployer
+          software-factory.redhat.com/seat: user3
+  data:
+    - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user3-gitea-token
+        property: GITEA_TOKEN
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: user4-gitea-token
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: user4-gitea-token
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: software-factory-deployer
+          software-factory.redhat.com/seat: user4
+  data:
+    - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user4-gitea-token
+        property: GITEA_TOKEN
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: user5-gitea-token
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-cluster
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: user5-gitea-token
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          app.kubernetes.io/managed-by: software-factory-deployer
+          software-factory.redhat.com/seat: user5
+  data:
+    - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user5-gitea-token
+        property: GITEA_TOKEN

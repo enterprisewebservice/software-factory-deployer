@@ -1,0 +1,131 @@
+# Seat git-credential rotator — the Gitea analogue of the platform's GitHub
+# App token refresh. Nightly (and on demand for the Module 3 instructor
+# beat), each seat's Gitea token is re-minted and written to Vault; from
+# there the running machinery does the rest with no human involved:
+#
+#   rotator → Vault (source of truth)
+#          → External Secrets Operator (1m refresh) → Secret <user>-gitea-token
+#          → Reloader (operator-managed annotation) rolls the seat's gateway
+#          → runtime resumes with the new credential; the old one is revoked.
+#
+# Rotation revokes the old token first, so a seat's gitea_* tools pause for
+# the ~2 minutes of propagation — hence the 04:15 schedule. Demo on demand:
+#   oc create job --from=cronjob/seat-gitea-token-rotator -n gitea rotate-now
+#
+# IMPERATIVE COMPANION (secrets never live in git): the Vault write token —
+#   oc create secret generic vault-rotator-token -n gitea \
+#     --from-literal=token=<vault token>
+# Currently the bootstrap root token; TODO: a scoped policy allowing only
+# agent-office/data/user*-gitea-token writes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seat-gitea-token-rotator-src
+  namespace: gitea
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+data:
+  rotate.py: |
+    #!/usr/bin/env python3
+    """Re-mint each seat's Gitea token and write it to Vault.
+
+    Idempotent per run: deletes the seat's token by NAME (agent-workspace,
+    matching the deployer's original mint), recreates it with the same name
+    and scopes, and PUTs the new value to Vault KV v2. Propagation to the
+    runtime is ESO's and Reloader's job, not ours.
+    """
+    import json, os, ssl, sys, urllib.request
+
+    GITEA = os.environ["GITEA_URL"].rstrip("/")
+    VAULT = os.environ["VAULT_URL"].rstrip("/")
+    VTOK = os.environ["VAULT_TOKEN"].strip()
+    ADMIN_USER = os.environ["GITEA_ADMIN_USER"]
+    ADMIN_PASS = os.environ["GITEA_ADMIN_PASS"]
+    SEATS = [s.strip() for s in os.environ.get("SEATS", "user1,user2,user3,user4,user5").split(",") if s.strip()]
+    TOKEN_NAME = os.environ.get("TOKEN_NAME", "agent-workspace")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    import base64
+    basic = base64.b64encode(f"{ADMIN_USER}:{ADMIN_PASS}".encode()).decode()
+
+    def call(method, url, body=None, headers=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data=data, method=method,
+                                     headers={"Content-Type": "application/json", **(headers or {})})
+        try:
+            with urllib.request.urlopen(req, context=ctx) as r:
+                return r.status, json.loads(r.read() or "null")
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or "null")
+
+    failed = False
+    for seat in SEATS:
+        auth = {"Authorization": "Basic " + basic}
+        # revoke-by-name is a 204 or a 404 (nothing to revoke) — both fine
+        st, _ = call("DELETE", f"{GITEA}/api/v1/users/{seat}/tokens/{TOKEN_NAME}?sudo={seat}", headers=auth)
+        st, tok = call("POST", f"{GITEA}/api/v1/users/{seat}/tokens?sudo={seat}",
+                       {"name": TOKEN_NAME, "scopes": ["all"]}, headers=auth)
+        if st != 201 or not tok.get("sha1"):
+            print(f"{seat}: MINT FAILED ({st}): {tok}", file=sys.stderr)
+            failed = True
+            continue
+        st, _ = call("POST", f"{VAULT}/v1/agent-office/data/{seat}-gitea-token",
+                     {"data": {"GITEA_TOKEN": tok["sha1"]}},
+                     headers={"X-Vault-Token": VTOK})
+        if st not in (200, 204):
+            print(f"{seat}: VAULT WRITE FAILED ({st}) — token minted but not stored; "
+                  f"the seat is broken until the next successful run", file=sys.stderr)
+            failed = True
+            continue
+        print(f"{seat}: rotated (token {TOKEN_NAME} re-minted, Vault updated)")
+    sys.exit(1 if failed else 0)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seat-gitea-token-rotator
+  namespace: gitea
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  schedule: "15 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: rotate
+              image: registry.access.redhat.com/ubi9/python-311:latest
+              command: ["python3", "/scripts/rotate.py"]
+              env:
+                - name: GITEA_URL
+                  value: https://gitea-gitea.apps.salamander.aimlworkbench.com
+                - name: VAULT_URL
+                  value: http://vault.vault.svc:8200
+                - name: GITEA_ADMIN_USER
+                  valueFrom:
+                    secretKeyRef: { name: gitea-admin-credentials, key: username }
+                - name: GITEA_ADMIN_PASS
+                  valueFrom:
+                    secretKeyRef: { name: gitea-admin-credentials, key: password }
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef: { name: vault-rotator-token, key: token }
+              volumeMounts:
+                - name: src
+                  mountPath: /scripts
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+          volumes:
+            - name: src
+              configMap:
+                name: seat-gitea-token-rotator-src
