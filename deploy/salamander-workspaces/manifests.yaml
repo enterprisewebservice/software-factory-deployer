@@ -815,3 +815,137 @@ spec:
       remoteRef:
         key: user5-gitea-token
         property: GITEA_TOKEN
+
+# Per-seat limited-admin identities (Dean, 2026-08-25): admin-userN is a
+# namespace-scoped operator persona — full admin inside userN-agent-
+# workspace, no grants anywhere else, NOT in the Keycloak attendees
+# group (so no Dev Hub catalog membership, no gitea hire routing).
+# htpasswd entries live in the workshop-users-htpasswd Secret (same
+# workshop password; imperative companion like the seats), User objects
+# pre-created for stable UIDs, Groups named like the user so any
+# groups-claim policy rows match (the ArgoCD lesson).
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: admin-user1
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - admin-user1
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-user1-workspace-admin
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: admin-user1
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: admin-user2
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - admin-user2
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-user2-workspace-admin
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: admin-user2
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: admin-user3
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - admin-user3
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-user3-workspace-admin
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: admin-user3
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: admin-user4
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - admin-user4
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-user4-workspace-admin
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: admin-user4
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: admin-user5
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - admin-user5
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: admin-user5-workspace-admin
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: admin-user5
