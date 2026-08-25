@@ -378,3 +378,57 @@ subjects:
   - kind: ServiceAccount
     name: default
     namespace: user5-agent-workspace
+
+# Per-seat OpenShift Groups, each named for its user. This is what makes
+# the ArgoCD seat rows match: this Argo version derives RBAC subjects
+# from the token's groups claim (and federated user id), NOT the name
+# scope — proven live 2026-08-25: dpeterson's admin flows through the
+# rhods-admins Group while his name-keyed row never matched. A group
+# named exactly like the user makes every user-keyed policy row work
+# under either derivation. Attendees must re-login after group changes
+# (claims are stamped at token issuance).
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: user1
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - user1
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: user2
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - user2
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: user3
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - user3
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: user4
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - user4
+---
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: user5
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+users:
+  - user5
