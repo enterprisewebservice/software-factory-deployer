@@ -1,7 +1,14 @@
 # Showroom viewer on salamander (Milestone A: instructor-led). Rendered with
 # showroom/showroom-single-pod; apply via deploy/salamander-showroom/manifests.yaml.
 guid: dev01
-user: dean
+# Seat identity: user_data below becomes the guide's AsciiDoc attributes at
+# antora build time (rebuilt on every pod restart). One Showroom release per
+# seat is the multi-user model (RHDP does the same); this salamander instance
+# is seat user1 — user1..user5 exist in Keycloak (attendees), Gitea (with
+# <user>-agents orgs), and OpenShift (htpasswd IdP "workshop", non-admin).
+# The password is NEVER baked into the page on salamander (public route);
+# RHDP builds inject the real generated seat password here.
+user: user1
 deployer:
   domain: apps.salamander.aimlworkbench.com
 content:
@@ -9,8 +16,8 @@ content:
   repoRef: main
   antoraPlaybook: site.yml
   user_data: |
-    user: dean
-    password: "<your OpenShift password>"
+    user: user1
+    password: "<workshop password>"
     openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
     openshift_api_url: https://api.salamander.aimlworkbench.com:6443
     devhub_url: https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com

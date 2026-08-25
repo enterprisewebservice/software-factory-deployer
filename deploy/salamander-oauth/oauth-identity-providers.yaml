@@ -1,0 +1,30 @@
+# Exact .spec.identityProviders on OAuth/cluster (salamander, 2026-08-25).
+# Reference for the workshop deployer's oauth stage.
+identityProviders:
+- htpasswd:
+    fileData:
+      name: htpasswd-jkrz2
+  mappingMethod: claim
+  name: htpasswd
+  type: HTPasswd
+- htpasswd:
+    fileData:
+      name: workshop-users-htpasswd
+  mappingMethod: add
+  name: workshop
+  type: HTPasswd
+- mappingMethod: add
+  name: factory-sso
+  openID:
+    claims:
+      email:
+      - email
+      name:
+      - name
+      preferredUsername:
+      - preferred_username
+    clientID: openshift-console
+    clientSecret:
+      name: factory-sso-client-secret
+    issuer: https://auth.runtab.io/realms/factory
+  type: OpenID

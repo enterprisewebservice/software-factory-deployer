@@ -91,8 +91,8 @@ metadata:
   namespace: showroom-factory
 data:
   user_data.yml: |
-    user: dean
-    password: "<your OpenShift password>"
+    user: user1
+    password: "<workshop password>"
     openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
     openshift_api_url: https://api.salamander.aimlworkbench.com:6443
     devhub_url: https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com
