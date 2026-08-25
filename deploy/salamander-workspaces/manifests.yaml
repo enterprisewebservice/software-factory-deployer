@@ -286,3 +286,88 @@ spec:
       remoteRef:
         key: codex-subscription-credentials
         property: auth.json
+
+# Gateway pods run as the namespace default SA and mount skill
+# artifacts as image volumes — they need the agent-office-imagevol
+# SCC, granted per workspace exactly as agent-office grants it
+# (found live 2026-08-25: first workspace hire FailedCreate on SCC).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-office-imagevol-default-sa
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: use-agent-office-imagevol-scc
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: user1-agent-workspace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-office-imagevol-default-sa
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: use-agent-office-imagevol-scc
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: user2-agent-workspace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-office-imagevol-default-sa
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: use-agent-office-imagevol-scc
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: user3-agent-workspace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-office-imagevol-default-sa
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: use-agent-office-imagevol-scc
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: user4-agent-workspace
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-office-imagevol-default-sa
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: use-agent-office-imagevol-scc
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: user5-agent-workspace
