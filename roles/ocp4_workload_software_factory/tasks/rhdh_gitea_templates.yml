@@ -84,6 +84,25 @@
     regexp: "^(\\s+)default: github$"
     replace: "\\1default: auto"
 
+- name: rhdh gitea templates | publish steps become constant (gitea-only mirror)
+  # The scaffolder's templated step-ifs flaked BOTH directions live on
+  # 2026-08-25 (a predicate-true hire also ran the github publish; a
+  # predicate-false hire ran the gitea publish with an empty host).
+  # Expression-free constants cannot flake: this mirror always publishes
+  # to Gitea and never to GitHub; GitHub-direct hires use the reference
+  # registration. Conditional VALUES (owner, namespace, app name) stay —
+  # the values-render context has been consistent in every observed run.
+  ansible.builtin.replace:
+    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
+    regexp: "^      if: .*'false' if .*else 'true'.*$"
+    replace: "      if: ${{ '{{' }} false {{ '}}' }}"
+
+- name: rhdh gitea templates | gitea publish always runs on this mirror
+  ansible.builtin.replace:
+    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
+    regexp: "^      if: .*'true' if .*else 'false'.*$"
+    replace: "      if: ${{ '{{' }} true {{ '}}' }}"
+
 - name: rhdh gitea templates | mirror takes the plain attendee-facing title
   ansible.builtin.replace:
     path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
