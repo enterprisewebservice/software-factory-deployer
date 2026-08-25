@@ -18,6 +18,14 @@
 # agent-office into every seat namespace:
 #   oc get secret quay-pull-secret -n agent-office -o yaml | <re-namespace> | oc apply
 # (found live 2026-08-25: first workspace hire ImagePullBackOff.)
+#
+# MATTERMOST SEATS (imperative, same reason): each seat needs a local
+# Mattermost account (username userN, the shared workshop password,
+# joined to team "agents") — Team edition has no OIDC, so these are
+# API-created. The operator's chat provisioning is enabled per-namespace
+# by replicating Secret mattermost-admin-token from agent-office into
+# each workspace; it then creates the agent's PRIVATE channel and
+# invites the seat owner automatically (operator >= v1.7.44).
 ---
 apiVersion: v1
 kind: Namespace
