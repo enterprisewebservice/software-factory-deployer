@@ -11,6 +11,13 @@
 #     workspace at once.
 # Scaling seats = appending a block; the keycloak_users stage generates the
 # same shape on workshop clusters.
+#
+# IMPERATIVE COMPANION (secrets never live in git): each workspace also
+# needs the registry pull credential the operator's gateway deployments
+# reference (imagePullSecrets: quay-pull-secret) — copy it from
+# agent-office into every seat namespace:
+#   oc get secret quay-pull-secret -n agent-office -o yaml | <re-namespace> | oc apply
+# (found live 2026-08-25: first workspace hire ImagePullBackOff.)
 ---
 apiVersion: v1
 kind: Namespace
