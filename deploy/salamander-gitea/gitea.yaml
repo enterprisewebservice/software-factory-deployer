@@ -16,3 +16,5 @@ spec:
   giteaAdminUser: opentlc-mgr
   giteaAdminEmail: opentlc-mgr@redhat.com
   giteaAdminPasswordLength: 32
+  giteaConfigMapName: gitea-config-factory
+  giteaHostname: gitea-gitea.apps.salamander.aimlworkbench.com
