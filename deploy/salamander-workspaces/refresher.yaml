@@ -1,0 +1,357 @@
+# Seat git-credential REFRESHER — the Gitea analogue of the platform's
+# GitHub App installation-token lifecycle, now with true self-expiring
+# tokens instead of nightly-re-minted PATs (supersedes rotator.yaml).
+#
+# The lifecycle, per seat, mirroring a GitHub App installation token:
+#
+#   Gitea OAuth2 grant (per seat, one-time bootstrap)
+#     → refresh token  → Vault agent-office/<user>-gitea-oauth   (PLATFORM-HELD, never in a seat namespace)
+#     → access token   → Vault agent-office/<user>-gitea-token   (the EXISTING path the seat already consumes)
+#          → External Secrets Operator (1m) → Secret <user>-gitea-token
+#          → agent-office-operator renders it into the seat gateway's openclaw.json (mcpServers header)
+#          → the openclaw runtime HOT-RELOADS the new header value — no pod restart (operator >= v1.7.46)
+#
+#   refresher CronJob (every 30m, ns gitea): refresh_token grant → fresh
+#   1-hour access token → Vault. It authenticates with the platform's OAuth
+#   CLIENT credentials + the held refresh token; it NEVER needs a seat
+#   password. Gitea's access tokens self-expire at 1 hour, so:
+#
+#     REVOCATION BY OMISSION — stop the refresher (or delete a seat's grant)
+#     and that seat's credential is dead within the hour, no explicit revoke.
+#     A GitHub App installation token dies the same way when the platform
+#     stops minting; this is the Gitea equivalent, and unlike the old PAT it
+#     has a clock of its own.
+#
+# Because delivery is now churn-free (config hot-reload, not a pod roll), the
+# refresh cadence can be aggressive without ever restarting a seat mid-exercise.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# IMPERATIVE COMPANIONS (secrets never live in git):
+#
+# 1. The platform OAuth2 application (one, shared by all seats). Created once
+#    against Gitea as the admin; its client_id/client_secret live in Vault,
+#    NOT here:
+#      curl -sk -u "$ADMIN:$PASS" -X POST \
+#        https://gitea-gitea.apps.<cluster>/api/v1/user/applications/oauth2 \
+#        -H 'Content-Type: application/json' \
+#        -d '{"name":"seat-agent-workspace",
+#             "redirect_uris":["http://127.0.0.1/seat-oauth-callback"],
+#             "confidential_client":true,"skip_secondary_authorization":true}'
+#      vault kv put agent-office/seat-oauth-client \
+#        client_id=<id> client_secret=<secret>
+#    skip_secondary_authorization lets the bootstrap authorize headlessly
+#    (no consent screen); confidential_client makes it a secret-bearing app.
+#
+# 2. The Vault WRITE token the refresher/bootstrap use (same one the old
+#    rotator used; scope it to agent-office/data/user*-gitea-* writes):
+#      oc create secret generic vault-rotator-token -n gitea \
+#        --from-literal=token=<vault token>
+#
+# 3. The one-time per-seat GRANT bootstrap. This is the ONLY step that needs
+#    a seat's authenticated session, so it runs where the seat password is
+#    already known — the deployer's gitea provisioning stage (gitea.yml,
+#    alongside user creation with keycloak_user_password) — or, for an
+#    already-provisioned cluster, as an admin-run Job that reads the seat
+#    passwords from a Secret the admin supplies out-of-band and never commits:
+#      oc create secret generic seat-bootstrap-passwords -n gitea \
+#        --from-literal=user1=<pw> --from-literal=user2=<pw> ...   # workshop password(s)
+#      oc create job --from=cronjob/seat-gitea-token-refresher -n gitea grant-bootstrap \
+#        --dry-run=client -o yaml | \
+#        <set command to ["python3","/scripts/bootstrap.py"] and mount seat-bootstrap-passwords> | oc apply -f -
+#      # then delete the Secret: oc delete secret seat-bootstrap-passwords -n gitea
+#    bootstrap.py performs the authorization-code flow per seat and seeds both
+#    Vault paths; from then on the refresher keeps the access token fresh with
+#    no password anywhere.
+# ─────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seat-gitea-token-refresher-src
+  namespace: gitea
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+data:
+  # ── Refresher: refresh_token grant → access token. No seat password. ──
+  refresh.py: |
+    #!/usr/bin/env python3
+    """Exchange each seat's held refresh token for a fresh Gitea OAuth2
+    access token and write the ACCESS token to the seat's existing Vault
+    path. The refresh token is PLATFORM-HELD (agent-office/<user>-gitea-oauth)
+    and never leaves Vault for a seat namespace.
+
+    Idempotent per run. Gitea returns a (possibly rotated) refresh token on
+    every exchange; we persist it back to Vault BEFORE writing the access
+    token, so a crash never strands the grant on an invalidated refresh
+    token. A seat whose refresh fails is logged and the run exits non-zero,
+    but other seats still refresh — one dead grant does not freeze the fleet.
+
+    Non-renewal is the kill switch: stop this CronJob and every seat's
+    1-hour access token ages out on Gitea's side within the hour while Vault
+    keeps serving the same (now-rejected) value — revocation by omission.
+    """
+    import json, os, ssl, sys, urllib.parse, urllib.request
+
+    GITEA = os.environ["GITEA_URL"].rstrip("/")
+    VAULT = os.environ["VAULT_URL"].rstrip("/")
+    VTOK = os.environ["VAULT_TOKEN"].strip()
+    SEATS = [s.strip() for s in os.environ.get("SEATS", "user1,user2,user3,user4,user5").split(",") if s.strip()]
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    def http(method, url, data=None, headers=None, form=False):
+        body = None
+        h = dict(headers or {})
+        if data is not None:
+            if form:
+                body = urllib.parse.urlencode(data).encode()
+                h["Content-Type"] = "application/x-www-form-urlencoded"
+            else:
+                body = json.dumps(data).encode()
+                h["Content-Type"] = "application/json"
+        req = urllib.request.Request(url, data=body, method=method, headers=h)
+        try:
+            with urllib.request.urlopen(req, context=ctx) as r:
+                return r.status, json.loads(r.read() or "null")
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or "null")
+
+    def vault_get(path):
+        st, body = http("GET", f"{VAULT}/v1/{path}", headers={"X-Vault-Token": VTOK})
+        if st != 200:
+            return None
+        return (body or {}).get("data", {}).get("data", {})
+
+    def vault_put(path, data):
+        st, _ = http("POST", f"{VAULT}/v1/{path}", {"data": data}, {"X-Vault-Token": VTOK})
+        return st in (200, 204)
+
+    client = vault_get("agent-office/data/seat-oauth-client") or {}
+    CID, CSECRET = client.get("client_id"), client.get("client_secret")
+    if not CID or not CSECRET:
+        print("FATAL: agent-office/seat-oauth-client missing client_id/client_secret", file=sys.stderr)
+        sys.exit(2)
+
+    failed = False
+    for seat in SEATS:
+        oauth = vault_get(f"agent-office/data/{seat}-gitea-oauth") or {}
+        rtok = oauth.get("REFRESH_TOKEN")
+        if not rtok:
+            print(f"{seat}: NO GRANT (agent-office/{seat}-gitea-oauth has no REFRESH_TOKEN) — "
+                  f"run the one-time bootstrap for this seat", file=sys.stderr)
+            failed = True
+            continue
+        st, tok = http("POST", f"{GITEA}/login/oauth/access_token", {
+            "grant_type": "refresh_token",
+            "refresh_token": rtok,
+            "client_id": CID,
+            "client_secret": CSECRET,
+        }, form=True)
+        if st != 200 or not tok.get("access_token"):
+            print(f"{seat}: REFRESH FAILED ({st}): {tok} — grant revoked or refresh token "
+                  f"expired; seat credential will die within the hour", file=sys.stderr)
+            failed = True
+            continue
+        # Persist the (possibly rotated) refresh token FIRST.
+        new_refresh = tok.get("refresh_token", rtok)
+        if not vault_put(f"agent-office/data/{seat}-gitea-oauth", {"REFRESH_TOKEN": new_refresh}):
+            print(f"{seat}: VAULT REFRESH-TOKEN WRITE FAILED — aborting this seat before it "
+                  f"loses its grant", file=sys.stderr)
+            failed = True
+            continue
+        if not vault_put(f"agent-office/data/{seat}-gitea-token", {"GITEA_TOKEN": tok["access_token"]}):
+            print(f"{seat}: VAULT ACCESS-TOKEN WRITE FAILED — refresh token saved, access token "
+                  f"not stored; next run recovers", file=sys.stderr)
+            failed = True
+            continue
+        print(f"{seat}: refreshed (access token expires in {tok.get('expires_in','?')}s)")
+    sys.exit(1 if failed else 0)
+
+  # ── Bootstrap: one-time authorization-code flow. Needs seat passwords. ──
+  bootstrap.py: |
+    #!/usr/bin/env python3
+    """One-time per-seat OAuth2 grant bootstrap.
+
+    For each seat: log in with the workshop password, drive the
+    authorization-code flow against the platform OAuth app (headless thanks
+    to skip_secondary_authorization), and seed BOTH Vault paths — the
+    platform-held refresh token and the seat-consumed access token. After
+    this the refresher keeps the access token fresh forever with no password.
+
+    Seat passwords come from Secret seat-bootstrap-passwords (key = username),
+    supplied out-of-band by the admin and deleted after — they are NEVER
+    committed and NEVER written to Vault or a seat namespace.
+    """
+    import json, os, re, ssl, sys, urllib.parse, urllib.request
+    from http.cookiejar import CookieJar
+
+    GITEA = os.environ["GITEA_URL"].rstrip("/")
+    VAULT = os.environ["VAULT_URL"].rstrip("/")
+    VTOK = os.environ["VAULT_TOKEN"].strip()
+    REDIRECT = os.environ.get("OAUTH_REDIRECT_URI", "http://127.0.0.1/seat-oauth-callback")
+    SEATS = [s.strip() for s in os.environ.get("SEATS", "user1,user2,user3,user4,user5").split(",") if s.strip()]
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    def vault_json(method, path, data=None):
+        body = json.dumps({"data": data}).encode() if data is not None else None
+        req = urllib.request.Request(f"{VAULT}/v1/{path}", data=body, method=method,
+                                     headers={"X-Vault-Token": VTOK, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, context=ctx) as r:
+                return r.status, json.loads(r.read() or "null")
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read() or "null")
+
+    def vault_get(path):
+        st, body = vault_json("GET", path)
+        return (body or {}).get("data", {}).get("data", {}) if st == 200 else {}
+
+    client = vault_get("agent-office/data/seat-oauth-client")
+    CID, CSECRET = client.get("client_id"), client.get("client_secret")
+    if not CID or not CSECRET:
+        print("FATAL: agent-office/seat-oauth-client missing", file=sys.stderr)
+        sys.exit(2)
+
+    failed = False
+    for seat in SEATS:
+        pw = os.environ.get(f"PW_{seat}")
+        if not pw:
+            print(f"{seat}: no password in seat-bootstrap-passwords — skipped", file=sys.stderr)
+            failed = True
+            continue
+        jar = CookieJar()
+        # A redirect handler that CAPTURES the callback Location instead of
+        # following it (the callback host doesn't exist) — robust across
+        # urllib versions, where a None-returning redirect_request otherwise
+        # yields the 302 as a normal response, not an HTTPError.
+        captured = {}
+        class CaptureRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                if "code=" in newurl or REDIRECT.split("://", 1)[-1].split("/", 1)[0] in newurl:
+                    captured["loc"] = newurl
+                    return None
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(jar),
+            urllib.request.HTTPSHandler(context=ctx),
+            CaptureRedirect())
+
+        def code_from_location(loc):
+            return urllib.parse.parse_qs(urllib.parse.urlparse(loc or "").query).get("code", [None])[0]
+
+        def hidden_fields(html):
+            out = {}
+            for tag in re.findall(r'<input[^>]*type="hidden"[^>]*>', html):
+                n = re.search(r'name="([^"]+)"', tag)
+                v = re.search(r'value="([^"]*)"', tag)
+                if n:
+                    out[n.group(1)] = v.group(1) if v else ""
+            return out
+
+        def grab_code(open_fn):
+            """Run open_fn; return the callback code whether the 302 was
+            captured (returned) or raised as HTTPError."""
+            captured.pop("loc", None)
+            try:
+                resp = open_fn()
+                if captured.get("loc"):
+                    return code_from_location(captured["loc"]), None
+                return None, resp  # 200 (consent page) — resp for the caller
+            except urllib.error.HTTPError as e:
+                loc = e.headers.get("Location", "") or captured.get("loc", "")
+                return code_from_location(loc), None
+
+        try:
+            # 1. GET login page → session cookie (Gitea 1.27 login is not
+            #    CSRF-gated; the form's _csrf is JS-injected and optional).
+            opener.open(f"{GITEA}/user/login").read()
+            # 2. POST credentials
+            data = urllib.parse.urlencode({"user_name": seat, "password": pw}).encode()
+            opener.open(urllib.request.Request(f"{GITEA}/user/login", data=data)).read()
+            # 3. GET authorize. First time → 200 consent page (POST the
+            #    grant); once granted → 302 straight to redirect_uri?code=
+            #    (skip_secondary_authorization). Handle both.
+            params = urllib.parse.urlencode({
+                "client_id": CID, "redirect_uri": REDIRECT,
+                "response_type": "code", "state": f"seat-{seat}",
+            })
+            code, resp = grab_code(lambda: opener.open(f"{GITEA}/login/oauth/authorize?{params}"))
+            if not code and resp is not None:
+                # Consent page — submit the grant, capture its redirect code.
+                fields = hidden_fields(resp.read().decode())
+                fields["granted"] = "true"
+                gdata = urllib.parse.urlencode(fields).encode()
+                code, _ = grab_code(lambda: opener.open(
+                    urllib.request.Request(f"{GITEA}/login/oauth/grant", data=gdata)))
+            if not code:
+                print(f"{seat}: AUTHORIZE/GRANT returned no code (bad password? app changed?)", file=sys.stderr)
+                failed = True
+                continue
+            # 4. Exchange code → tokens
+            tdata = urllib.parse.urlencode({
+                "grant_type": "authorization_code", "code": code,
+                "client_id": CID, "client_secret": CSECRET, "redirect_uri": REDIRECT,
+            }).encode()
+            treq = urllib.request.Request(f"{GITEA}/login/oauth/access_token", data=tdata)
+            with urllib.request.urlopen(treq, context=ctx) as r:
+                tok = json.loads(r.read())
+        except Exception as e:  # noqa: BLE001 — bootstrap is best-effort per seat
+            print(f"{seat}: BOOTSTRAP ERROR: {e}", file=sys.stderr)
+            failed = True
+            continue
+        if not tok.get("refresh_token") or not tok.get("access_token"):
+            print(f"{seat}: token exchange missing tokens: {tok}", file=sys.stderr)
+            failed = True
+            continue
+        vault_json("POST", f"agent-office/data/{seat}-gitea-oauth", {"REFRESH_TOKEN": tok["refresh_token"]})
+        vault_json("POST", f"agent-office/data/{seat}-gitea-token", {"GITEA_TOKEN": tok["access_token"]})
+        print(f"{seat}: grant bootstrapped (refresh token held by platform, access token seeded)")
+    sys.exit(1 if failed else 0)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seat-gitea-token-refresher
+  namespace: gitea
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  # Every 30 minutes — access tokens live 1 hour, so this keeps two
+  # refreshes' headroom. Delivery is churn-free (operator hot-reloads the
+  # config), so an aggressive cadence never restarts a seat.
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: refresh
+              image: registry.access.redhat.com/ubi9/python-311:latest
+              command: ["python3", "/scripts/refresh.py"]
+              env:
+                - name: GITEA_URL
+                  value: https://gitea-gitea.apps.salamander.aimlworkbench.com
+                - name: VAULT_URL
+                  value: http://vault.vault.svc:8200
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef: { name: vault-rotator-token, key: token }
+              volumeMounts:
+                - name: src
+                  mountPath: /scripts
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+          volumes:
+            - name: src
+              configMap:
+                name: seat-gitea-token-refresher-src

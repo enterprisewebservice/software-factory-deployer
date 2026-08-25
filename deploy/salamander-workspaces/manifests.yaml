@@ -33,15 +33,38 @@
 # ${GITEA_TOKEN}, resolved from Secret <user>-gitea-token (key
 # GITEA_TOKEN) in that seat's workspace via the AW's
 # spec.tools.mcpServers[].envFromSecret, so gitea_* tools act AS the
-# seat's Gitea user (verified live 2026-08-25, user1). The deployer's
-# gitea stage mints the tokens (recreate of per-user token
-# `agent-workspace`) and stores canonical Secrets in the gitea
-# namespace — copy each into its seat namespace:
+# seat's Gitea user (verified live 2026-08-25, user1).
+#
+# Since 2026-08-25 the seat credential is a self-expiring Gitea OAuth2
+# ACCESS token (1h), not a re-minted PAT — the same lifecycle the
+# platform's GitHub App identity runs. Per seat, one-time:
+#   * a Gitea OAuth2 grant is bootstrapped against the shared platform
+#     app `seat-agent-workspace` (agent-office/seat-oauth-client in Vault);
+#   * its REFRESH token is written to Vault agent-office/<user>-gitea-oauth
+#     — PLATFORM-HELD, never synced into a seat namespace;
+#   * its ACCESS token is written to the EXISTING Vault path
+#     agent-office/<user>-gitea-token (key GITEA_TOKEN), so the ESO +
+#     operator delivery chain below is unchanged.
+# The refresher CronJob (refresher.yaml, ns gitea, every 30m) keeps the
+# access token fresh via the refresh_token grant — no seat password. The
+# operator (>= v1.7.46) renders GITEA_TOKEN into the seat gateway's
+# openclaw.json and the runtime HOT-RELOADS it, so a refresh reaches the
+# agent with NO pod restart. Stop the refresher and the seat's access
+# token dies within the hour (revocation by omission). The one-time grant
+# bootstrap is the ONLY step needing the seat password — see refresher.yaml
+# IMPERATIVE COMPANION #3 (run at provisioning, where keycloak_user_password
+# is known, or as an admin Job from an out-of-band password Secret).
+#
+# Canonical per-seat Secrets still live in the gitea namespace (it always
+# exists at provisioning; the seat workspaces may not yet) — copy each into
+# its seat namespace:
 #   oc get secret user1-gitea-token -n gitea -o yaml | <re-namespace> | oc apply
 # Same flow for gitea-mcp-broker-token (gitea ns → agent-office): the
 # broker's DISCOVERY credential for the gitea MCPServerRegistration
-# (key AUTHORIZATION, label mcp.kuadrant.io/secret). Re-runs of the
-# gitea stage ROTATE all of these — re-replicate afterwards.
+# (key AUTHORIZATION, label mcp.kuadrant.io/secret). The refresher UPDATES
+# <user>-gitea-token in place every 30m — but ESO syncs each seat copy from
+# Vault directly, so no manual re-replication is needed after a refresh
+# (unlike the retired rotator's re-mint).
 ---
 apiVersion: v1
 kind: Namespace
@@ -633,10 +656,15 @@ subjects:
 
 # Seat git credentials, Vault-backed (2026-08-25): the same lifecycle the
 # platform's GitHub App identity uses — Vault is the source of truth,
-# External Secrets Operator syncs each seat's token into its workspace
-# every minute, the operator mounts it into the runtime, Reloader rolls
-# the gateway when it rotates, and the nightly rotator CronJob (ns gitea)
-# re-mints it. Module 3 walks this chain hop by hop.
+# External Secrets Operator syncs each seat's ACCESS token into its
+# workspace every minute, and the operator (>= v1.7.46) renders it into the
+# seat gateway's openclaw.json where the runtime hot-reloads it — no pod
+# roll. The token is a self-expiring Gitea OAuth2 access token, refreshed
+# every 30m by the refresher CronJob (refresher.yaml, ns gitea) from a
+# platform-held refresh token; stop refreshing and it dies within the hour.
+# These ExternalSecrets sync only the access-token path — the refresh token
+# stays in Vault (agent-office/<user>-gitea-oauth), never in a seat
+# namespace. Module 3 walks this chain hop by hop.
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret

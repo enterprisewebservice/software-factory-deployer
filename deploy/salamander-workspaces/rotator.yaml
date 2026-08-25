@@ -1,15 +1,24 @@
-# Seat git-credential rotator — the Gitea analogue of the platform's GitHub
-# App token refresh. Nightly (and on demand for the Module 3 instructor
-# beat), each seat's Gitea token is re-minted and written to Vault; from
-# there the running machinery does the rest with no human involved:
+# ─────────────────────────────────────────────────────────────────────────
+# RETIRED 2026-08-25 — superseded by refresher.yaml.
 #
-#   rotator → Vault (source of truth)
-#          → External Secrets Operator (1m refresh) → Secret <user>-gitea-token
-#          → Reloader (operator-managed annotation) rolls the seat's gateway
-#          → runtime resumes with the new credential; the old one is revoked.
+# This nightly PAT re-mint rotator is replaced by true self-expiring Gitea
+# OAuth2 access tokens: refresher.yaml holds each seat's refresh token in
+# Vault and mints a fresh 1h access token every 30m, and the operator
+# (>= v1.7.46) delivers it churn-free (config hot-reload, no pod roll). The
+# old model's compromise — re-mint because self-expiring tokens meant
+# restarting a seat twice an hour — no longer applies.
 #
-# Rotation revokes the old token first, so a seat's gitea_* tools pause for
-# the ~2 minutes of propagation — hence the 04:15 schedule. Demo on demand:
+# Left here SUSPENDED (spec.suspend: true) rather than deleted so git matches
+# the live cluster through the migration window: seats keep running on their
+# existing non-expiring PAT until each seat's OAuth grant is bootstrapped
+# (refresher.yaml IMPERATIVE COMPANION #3). Once every seat is on OAuth,
+# delete this file and its on-cluster CronJob + ConfigMap:
+#   oc delete cronjob seat-gitea-token-rotator -n gitea
+#   oc delete configmap seat-gitea-token-rotator-src -n gitea
+#
+# Original operation (for reference): each seat's Gitea token was re-minted
+# nightly (and on the Module 3 instructor trigger) and written to Vault; ESO
+# synced it, and the old operator rolled the gateway pod on the change.
 #   oc create job --from=cronjob/seat-gitea-token-rotator -n gitea rotate-now
 #
 # IMPERATIVE COMPANION (secrets never live in git): the Vault write token —
@@ -90,7 +99,9 @@ metadata:
   namespace: gitea
   labels:
     app.kubernetes.io/managed-by: software-factory-deployer
+  # RETIRED — suspended; refresher.yaml is the live path.
 spec:
+  suspend: true
   schedule: "15 4 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
