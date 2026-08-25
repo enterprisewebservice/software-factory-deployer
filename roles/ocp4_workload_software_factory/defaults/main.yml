@@ -19,6 +19,12 @@ eso_channel: stable
 
 # Developer Hub
 rhdh_namespace: rhdh
+
+# Developer Hub sign-in page. Workshop clusters show ONLY Keycloak (attendees land straight
+# on the realm login). Mixed/reference clusters set a list, e.g. ['github', 'oidc'], which
+# RHDH renders as a multi-provider picker (signInPage accepts a list — verified on 1.9).
+rhdh_sign_in_page: oidc
+
 # The golden-path template source. No workshop fork needed: the genesis
 # template routes per-hire in place (gitProvider: auto) —
 # rhdh_gitea_templates.yml mirrors this repo@revision into the in-cluster
