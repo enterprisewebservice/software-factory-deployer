@@ -1,0 +1,42 @@
+# OpenShift GitOps per-seat visibility (Dean, 2026-08-25: "user1 can see
+# all apps — they should only see their own").
+#
+# The default instance ships policy.default role:readonly — every
+# authenticated user reads every Application. This merge patch on the
+# openshift-gitops ArgoCD CR (operator-managed, reconciles argocd-rbac-cm)
+# flips the default to deny and grants each seat exactly its own apps:
+# the per-org ApplicationSet names apps "<org>-<repo minus -gitops>",
+# so seat userN owns agent-office/userN-agents-*.
+#
+# Admin access is unaffected: dpeterson + admin groups keep role:admin
+# (matched via scopes [groups, name]), and RHDH's GitOps cards use the
+# local ArgoCD admin account, which bypasses RBAC policy entirely.
+#
+# Apply:
+#   oc patch argocd openshift-gitops -n openshift-gitops --type=merge \
+#     --patch-file deploy/salamander-workspaces/argocd-rbac-patch.yaml
+# Workshop stage: generate one row-triplet per seat from the user list.
+spec:
+  rbac:
+    defaultPolicy: role:none
+    scopes: '[groups, name]'
+    policy: |
+      g, system:cluster-admins, role:admin
+      g, cluster-admins, role:admin
+      g, rhods-admins, role:admin
+      g, dpeterson, role:admin
+      p, user1, applications, get, agent-office/user1-agents-*, allow
+      p, user1, applications, sync, agent-office/user1-agents-*, allow
+      p, user1, projects, get, agent-office, allow
+      p, user2, applications, get, agent-office/user2-agents-*, allow
+      p, user2, applications, sync, agent-office/user2-agents-*, allow
+      p, user2, projects, get, agent-office, allow
+      p, user3, applications, get, agent-office/user3-agents-*, allow
+      p, user3, applications, sync, agent-office/user3-agents-*, allow
+      p, user3, projects, get, agent-office, allow
+      p, user4, applications, get, agent-office/user4-agents-*, allow
+      p, user4, applications, sync, agent-office/user4-agents-*, allow
+      p, user4, projects, get, agent-office, allow
+      p, user5, applications, get, agent-office/user5-agents-*, allow
+      p, user5, applications, sync, agent-office/user5-agents-*, allow
+      p, user5, projects, get, agent-office, allow
