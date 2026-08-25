@@ -432,3 +432,177 @@ metadata:
     app.kubernetes.io/managed-by: software-factory-deployer
 users:
   - user5
+
+# mm-bridge reach into each seat workspace: the chat bridge drives agents
+# via pods/exec on their gateway pods, so its agent-office ServiceAccount
+# needs the same narrow Role here that it has at home.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mm-bridge
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [agentoffice.ai]
+    resources: [agentworkstations]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mm-bridge
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mm-bridge
+subjects:
+  - kind: ServiceAccount
+    name: mm-bridge
+    namespace: agent-office
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mm-bridge
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [agentoffice.ai]
+    resources: [agentworkstations]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mm-bridge
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mm-bridge
+subjects:
+  - kind: ServiceAccount
+    name: mm-bridge
+    namespace: agent-office
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mm-bridge
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [agentoffice.ai]
+    resources: [agentworkstations]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mm-bridge
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mm-bridge
+subjects:
+  - kind: ServiceAccount
+    name: mm-bridge
+    namespace: agent-office
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mm-bridge
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [agentoffice.ai]
+    resources: [agentworkstations]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mm-bridge
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mm-bridge
+subjects:
+  - kind: ServiceAccount
+    name: mm-bridge
+    namespace: agent-office
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mm-bridge
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [agentoffice.ai]
+    resources: [agentworkstations]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mm-bridge
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mm-bridge
+subjects:
+  - kind: ServiceAccount
+    name: mm-bridge
+    namespace: agent-office
