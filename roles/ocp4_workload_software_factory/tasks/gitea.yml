@@ -142,6 +142,116 @@
         token: "{{ r_gitea_token.json.sha1 }}"
   no_log: true
 
+# Per-seat agent tokens — the pass-through credential each seat's own
+# AgentGateway sends to the governed gitea-mcp backend (agent-office
+# cluster/gitea-mcp): Authorization: Bearer ${GITEA_TOKEN}, resolved
+# from Secret <user>-gitea-token via the AgentWorkstation's
+# spec.tools.mcpServers[].envFromSecret. gitea_* calls act AS the
+# seat's Gitea user — this token IS the tenancy boundary (no injection
+# on the gitea path, unlike github's App token). Canonical Secrets live
+# HERE (the gitea namespace always exists at this stage; the seat
+# workspaces may not yet) — replicating them into each
+# <user>-agent-workspace is the imperative companion documented in
+# deploy/salamander-workspaces/manifests.yaml. Recreate-on-run rotates
+# the tokens: re-replicate the workspace copies after a re-run.
+- name: gitea | mint per-attendee agent tokens (recreate to stay idempotent)
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/users/{{ keycloak_user_prefix }}{{ item }}/tokens/agent-workspace"
+    method: DELETE
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [204, 404]
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  no_log: true
+
+- name: gitea | create per-attendee agent tokens
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/users/{{ keycloak_user_prefix }}{{ item }}/tokens"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: agent-workspace
+      scopes: ["all"]
+    status_code: [201]
+  register: r_gitea_seat_tokens
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  no_log: true
+
+- name: gitea | canonical per-seat token Secrets
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ keycloak_user_prefix }}{{ item.item }}-gitea-token"
+        namespace: "{{ gitea_namespace }}"
+        labels:
+          app.kubernetes.io/managed-by: software-factory-deployer
+          software-factory.redhat.com/seat: "{{ keycloak_user_prefix }}{{ item.item }}"
+      type: Opaque
+      stringData:
+        GITEA_TOKEN: "{{ item.json.sha1 }}"
+  loop: "{{ r_gitea_seat_tokens.results }}"
+  loop_control:
+    label: "{{ keycloak_user_prefix }}{{ item.item }}"
+  no_log: true
+
+# Broker discovery credential for the gitea MCPServerRegistration — the
+# mcp-gateway broker's tools/list connection ONLY (Kuadrant #926: the
+# credentialRef never rides the per-call path; per-call auth is the
+# seat token above passing through). Shape is the broker contract: key
+# AUTHORIZATION holds the literal header value, and the
+# mcp.kuadrant.io/secret label is the broker's Secret filter. Canonical
+# here; replicate into agent-office beside the registration (same
+# manifests.yaml companion).
+- name: gitea | mint the mcp-broker discovery token (recreate to stay idempotent)
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens/mcp-broker"
+    method: DELETE
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [204, 404]
+  no_log: true
+
+- name: gitea | create the mcp-broker discovery token
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: mcp-broker
+      scopes: ["read:user"]
+    status_code: [201]
+  register: r_gitea_broker_token
+  no_log: true
+
+- name: gitea | canonical broker credential Secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gitea-mcp-broker-token
+        namespace: "{{ gitea_namespace }}"
+        labels:
+          mcp.kuadrant.io/secret: "true"
+          app.kubernetes.io/name: gitea-mcp-server
+          app.kubernetes.io/component: broker-credential
+      type: Opaque
+      stringData:
+        AUTHORIZATION: "Bearer {{ r_gitea_broker_token.json.sha1 }}"
+  no_log: true
+
 - name: gitea | agent-office AppProject + ApplicationSet (gitea flavor)
   kubernetes.core.k8s:
     state: present

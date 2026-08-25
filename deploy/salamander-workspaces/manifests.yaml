@@ -26,6 +26,22 @@
 # by replicating Secret mattermost-admin-token from agent-office into
 # each workspace; it then creates the agent's PRIVATE channel and
 # invites the seat owner automatically (operator >= v1.7.44).
+#
+# GITEA SEAT TOKENS (imperative, same reason): the governed gitea-mcp
+# backend (agent-office cluster/gitea-mcp) authenticates per seat by
+# PASS-THROUGH — each hire's AgentGateway sends Authorization: Bearer
+# ${GITEA_TOKEN}, resolved from Secret <user>-gitea-token (key
+# GITEA_TOKEN) in that seat's workspace via the AW's
+# spec.tools.mcpServers[].envFromSecret, so gitea_* tools act AS the
+# seat's Gitea user (verified live 2026-08-25, user1). The deployer's
+# gitea stage mints the tokens (recreate of per-user token
+# `agent-workspace`) and stores canonical Secrets in the gitea
+# namespace — copy each into its seat namespace:
+#   oc get secret user1-gitea-token -n gitea -o yaml | <re-namespace> | oc apply
+# Same flow for gitea-mcp-broker-token (gitea ns → agent-office): the
+# broker's DISCOVERY credential for the gitea MCPServerRegistration
+# (key AUTHORIZATION, label mcp.kuadrant.io/secret). Re-runs of the
+# gitea stage ROTATE all of these — re-replicate afterwards.
 ---
 apiVersion: v1
 kind: Namespace
