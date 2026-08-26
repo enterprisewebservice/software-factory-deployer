@@ -52,6 +52,7 @@ for AGENT in $AGENTS; do
   echo "  argo application: $(oc get application.argoproj.io "$APP" -n openshift-gitops --no-headers 2>/dev/null || echo absent)"
   echo "  gitea repo: $ORG/$REPO -> HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$GAU:$GAP" "$G/api/v1/repos/$ORG/$REPO")"
   echo "  workspace resources: $(oc get agentworkstation,agentgateway,pvc -n "$NS" --no-headers 2>/dev/null | wc -l | tr -d ' ') objects"
+  echo "  installed skills: $(oc get skills -n "$NS" --no-headers 2>/dev/null | wc -l | tr -d ' ') (module 4 hand-applies these; not argo-cascaded)"
 
   if [ "$CONFIRM" != "--confirm" ]; then
     echo "  DRY-RUN (add --confirm to delete the above)"
@@ -77,6 +78,12 @@ for AGENT in $AGENTS; do
   # 3. the repo
   curl -s -o /dev/null -w "  gitea repo deleted: %{http_code}\n" -X DELETE \
     -u "$GAU:$GAP" "$G/api/v1/repos/$ORG/$REPO"
+
+  # 4. hand-applied Skill CRs (module 4) — namespaced but not argo-managed,
+  #    so the app cascade never removes them; module 4 exercise 1 expects
+  #    "No resources found" on a fresh run
+  oc delete skills --all -n "$NS" --ignore-not-found >/dev/null 2>&1 || true
+  echo "  installed skills deleted: $(oc get skills -n "$NS" --no-headers 2>/dev/null | wc -l | tr -d ' ') remain"
 
   # settle + verify
   for i in $(seq 1 12); do

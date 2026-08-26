@@ -2,7 +2,9 @@
 # render-skill-cr.sh <name> <version> [registry-base]
 #
 # Registry row -> Skill CR YAML on stdout, with the exact provenance
-# vocabulary the operator's installSkill writes (labels skill-tier/pack,
+# tier 'registry' = neutral pattern vocabulary for workshop-facing CRs
+# (operator's own installSkill writes tier 'mindifact'; nothing branches on it).
+# Otherwise mirrors the operator's installSkill vocabulary (labels skill-tier/pack,
 # annotations registry/pack-ref/manifest/content-url, spec.version and
 # dependencies, source.inline fetched from the registry). Apply the output
 # into any namespace whose agents should learn the skill:
@@ -30,7 +32,7 @@ metadata:
   name: {name}
   labels:
     app.kubernetes.io/managed-by: agent-office
-    agentoffice.ai/skill-tier: mindifact""")
+    agentoffice.ai/skill-tier: registry""")
 if man.get("member"):
     print(f"    agentoffice.ai/pack: {man['member']}")
 print(f"""  annotations:
