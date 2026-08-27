@@ -53,6 +53,51 @@ if [ -z "$AGENTS" ]; then
   exit 0
 fi
 
+# --- SERVICE footprint (module 6): if the filter names an org repo that is
+# NOT an agent gitops repo, reset that service instead of an agent. A
+# seat-wide reset sweeps every such repo after the agents.
+reset_service() {
+  local REPO="$1"
+  local APP="${ORG}-${REPO}"
+  echo "== seat $SEAT / service $REPO =="
+  echo "  registration: $(oc get mcpserverregistration ${SEAT}-${REPO} -n "$NS" --no-headers 2>/dev/null || echo absent)"
+  echo "  route: $(oc get httproute ${REPO}-mcp-route -n "$NS" --no-headers 2>/dev/null || echo absent)"
+  echo "  pac repository: $(oc get repositories.pipelinesascode.tekton.dev "$REPO" -n "$NS" --no-headers 2>/dev/null || echo absent)"
+  echo "  pipelineruns: $(oc get pipelinerun -n "$NS" --no-headers 2>/dev/null | grep -c "^${REPO}-" || echo 0)"
+  echo "  argo app: $(oc get application.argoproj.io "$APP" -n openshift-gitops --no-headers 2>/dev/null || echo absent)"
+  echo "  gitea repo: $ORG/$REPO -> HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$GAU:$GAP" "$G/api/v1/repos/$ORG/$REPO")"
+  if [ "$CONFIRM" != "--confirm" ]; then
+    echo "  DRY-RUN (add --confirm to delete the above)"
+    return
+  fi
+  oc delete mcpserverregistration ${SEAT}-${REPO} -n "$NS" --ignore-not-found
+  oc delete httproute ${REPO}-mcp-route -n "$NS" --ignore-not-found
+  oc delete repositories.pipelinesascode.tekton.dev "$REPO" -n "$NS" --ignore-not-found
+  oc get pipelinerun -n "$NS" --no-headers 2>/dev/null | awk '{print $1}' | grep "^${REPO}-" | xargs -r oc delete pipelinerun -n "$NS" >/dev/null 2>&1 || true
+  # repo first so the seat-services ApplicationSet stops generating the
+  # app; then the app (its finalizer cascades the deployed resources)
+  curl -s -o /dev/null -w "  gitea repo deleted: %{http_code}\n" -X DELETE \
+    -u "$GAU:$GAP" "$G/api/v1/repos/$ORG/$REPO"
+  if oc get application.argoproj.io "$APP" -n openshift-gitops >/dev/null 2>&1; then
+    oc delete application.argoproj.io "$APP" -n openshift-gitops --wait=true --timeout=180s
+    echo "  argo app deleted (cascaded service resources)"
+  fi
+  echo "  verify: service pods: $(oc get pods -n "$NS" -l app.kubernetes.io/name="$REPO" --no-headers 2>/dev/null | wc -l | tr -d ' ') (want 0 after cascade)"
+  echo "  note: quay repo deanpeterson/${SEAT}-${REPO} keeps old digests (harmless; :main is overwritten on next build)"
+}
+
+if [ -n "$ONLY" ] && ! printf '%s\n' $AGENTS | grep -qx "$ONLY"; then
+  case "$ONLY" in
+    *-agent-gitops|*-gitops) echo "seat $SEAT: '$ONLY' looks like a gitops repo, not an agent or service"; exit 1;;
+  esac
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' -u "$GAU:$GAP" "$G/api/v1/repos/$ORG/$ONLY")" = "200" ] || oc get application.argoproj.io "${ORG}-${ONLY}" -n openshift-gitops >/dev/null 2>&1; then
+    reset_service "$ONLY"
+    echo "seat $SEAT service reset complete"
+    exit 0
+  fi
+  echo "seat $SEAT: '$ONLY' not found as agent or service"; exit 1
+fi
+
 for AGENT in $AGENTS; do
   REPO="${AGENT}-agent-gitops"
   APP="${ORG}-${AGENT}-agent"
@@ -112,4 +157,9 @@ for AGENT in $AGENTS; do
   echo "  verify: catalog '$AGENT': $(curl -s -H "Authorization: Bearer $RTOK" "$RHDH/api/catalog/entities/by-query?filter=metadata.name=$AGENT" | python3 -c 'import sys,json;print(len(json.load(sys.stdin).get("items",[])))') entities"
   echo "  verify: gitea repo: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$GAU:$GAP" "$G/api/v1/repos/$ORG/$REPO") (want 404)"
 done
+if [ -z "$ONLY" ]; then
+  for R in $(curl -s -u "$GAU:$GAP" "$G/api/v1/orgs/$ORG/repos" | python3 -c "import sys,json;[print(r['name']) for r in json.load(sys.stdin) if not r['name'].endswith('-gitops')]" 2>/dev/null); do
+    reset_service "$R"
+  done
+fi
 echo "seat $SEAT reset complete — the genesis template will run clean"
