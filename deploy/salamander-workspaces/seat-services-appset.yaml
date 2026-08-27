@@ -1,0 +1,105 @@
+# Seat services ApplicationSet — the PROMOTION lane for services the
+# dev agents ship (module 6). One scmProvider.gitea generator per seat
+# org (Argo's gitea provider is org-only, same constraint as the agents
+# appset). A repo is adopted when it carries deploy/deployment.yaml and
+# is NOT an agent gitops repo (those carry argocd/applicationset-managed
+# and belong to agent-office-agents-gitea). The app syncs deploy/ into
+# the seat's workspace namespace: merge -> build (PaC) -> this appset
+# promotes. Apps are named <org>-<repo> so the seats' ArgoCD RBAC rows
+# (user1-agents-*) cover them.
+#
+# Milestone B: fold into the deployer's ansible j2 alongside
+# agent-office-appset-gitea.yaml.j2.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: seat-services-gitea
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - scmProvider:
+        gitea:
+          owner: user1-agents
+          api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+          tokenRef: {secretName: agent-office-gitea-scm, key: token}
+          insecure: true
+        cloneProtocol: https
+        requeueAfterSeconds: 60
+        filters:
+          - pathsExist: ['deploy/deployment.yaml']
+            pathsDoNotExist: ['argocd/applicationset-managed']
+        values: {namespace: user1-agent-workspace}
+    - scmProvider:
+        gitea:
+          owner: user2-agents
+          api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+          tokenRef: {secretName: agent-office-gitea-scm, key: token}
+          insecure: true
+        cloneProtocol: https
+        requeueAfterSeconds: 60
+        filters:
+          - pathsExist: ['deploy/deployment.yaml']
+            pathsDoNotExist: ['argocd/applicationset-managed']
+        values: {namespace: user2-agent-workspace}
+    - scmProvider:
+        gitea:
+          owner: user3-agents
+          api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+          tokenRef: {secretName: agent-office-gitea-scm, key: token}
+          insecure: true
+        cloneProtocol: https
+        requeueAfterSeconds: 60
+        filters:
+          - pathsExist: ['deploy/deployment.yaml']
+            pathsDoNotExist: ['argocd/applicationset-managed']
+        values: {namespace: user3-agent-workspace}
+    - scmProvider:
+        gitea:
+          owner: user4-agents
+          api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+          tokenRef: {secretName: agent-office-gitea-scm, key: token}
+          insecure: true
+        cloneProtocol: https
+        requeueAfterSeconds: 60
+        filters:
+          - pathsExist: ['deploy/deployment.yaml']
+            pathsDoNotExist: ['argocd/applicationset-managed']
+        values: {namespace: user4-agent-workspace}
+    - scmProvider:
+        gitea:
+          owner: user5-agents
+          api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+          tokenRef: {secretName: agent-office-gitea-scm, key: token}
+          insecure: true
+        cloneProtocol: https
+        requeueAfterSeconds: 60
+        filters:
+          - pathsExist: ['deploy/deployment.yaml']
+            pathsDoNotExist: ['argocd/applicationset-managed']
+        values: {namespace: user5-agent-workspace}
+  template:
+    metadata:
+      name: '{{ .organization }}-{{ .repository }}'
+      labels:
+        app.kubernetes.io/managed-by: seat-services-applicationset
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: agent-office
+      source:
+        repoURL: '{{ .url }}'
+        targetRevision: '{{ .branch }}'
+        path: deploy
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ .values.namespace }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true
