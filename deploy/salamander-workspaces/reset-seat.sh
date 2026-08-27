@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# reset-seat.sh <userN> [--confirm]
+# reset-seat.sh <userN> [agent] [--confirm]
+#
+# With [agent] given, only that agent's footprint is removed (its
+# catalog entries, Argo app, and Gitea repo); other agents in the seat
+# are untouched. Without it, every agent in the seat is reset.
 #
 # Returns a workshop seat to its PRE-HIRE state so the Dev Hub genesis
 # template runs clean again — closing the classic re-run failures:
@@ -20,8 +24,16 @@
 #
 # Default is DRY-RUN: prints the exact deletion set. Add --confirm to act.
 set -euo pipefail
-SEAT="${1:?usage: reset-seat.sh <userN> [--confirm]}"
-CONFIRM="${2:-}"
+SEAT="${1:?usage: reset-seat.sh <userN> [agent] [--confirm]}"
+ONLY=""
+CONFIRM=""
+for a in "${2:-}" "${3:-}"; do
+  case "$a" in
+    --confirm) CONFIRM="--confirm";;
+    "") ;;
+    *) ONLY="$a";;
+  esac
+done
 NS="${SEAT}-agent-workspace"
 ORG="${SEAT}-agents"
 G="https://gitea-gitea.apps.salamander.aimlworkbench.com"
@@ -32,6 +44,10 @@ GAP=$(oc get secret gitea-admin-credentials -n gitea -o jsonpath='{.data.passwor
 RTOK=$(oc get secret agent-office-rhdh-token -n rhdh-test -o jsonpath='{.data.token}' | base64 -d)
 
 AGENTS=$(oc get agentworkstations -n "$NS" --no-headers -o custom-columns=N:.metadata.name 2>/dev/null || true)
+if [ -n "$ONLY" ]; then
+  AGENTS=$(printf '%s\n' $AGENTS | grep -x "$ONLY" || true)
+  [ -z "$AGENTS" ] && { echo "seat $SEAT: agent '$ONLY' not found in $NS"; exit 1; }
+fi
 if [ -z "$AGENTS" ]; then
   echo "seat $SEAT: no agents in $NS — nothing to reset"
   exit 0
@@ -81,8 +97,9 @@ for AGENT in $AGENTS; do
 
   # 4. hand-applied Skill CRs (module 4) — namespaced but not argo-managed,
   #    so the app cascade never removes them; module 4 exercise 1 expects
-  #    "No resources found" on a fresh run
-  oc delete skills --all -n "$NS" --ignore-not-found >/dev/null 2>&1 || true
+  #    "No resources found" on a fresh run. Seat-wide state — skipped when
+  #    resetting a single agent.
+  [ -n "$ONLY" ] || oc delete skills --all -n "$NS" --ignore-not-found >/dev/null 2>&1 || true
   echo "  installed skills deleted: $(oc get skills -n "$NS" --no-headers 2>/dev/null | wc -l | tr -d ' ') remain"
 
   # settle + verify
