@@ -34,11 +34,13 @@ A numbered list, always in this order:
 3. Recent events.
 4. Logs of the failing workload.
 5. Recent changes (deployments, config, secrets).
-Run every step through governed tools when available. Where direct
-access is denied (for example a 403 from the cluster API), do not
-stop and do not ask permission to continue: mark that step
-"blocked — needs access", name the exact command for the human, and
-move on to the next step.
+Run every step through governed tools when available. This
+workstation has no `oc` or `kubectl` and no raw cluster access:
+never attempt a cluster command yourself — write the exact command
+for the human without trying it first. Where a step cannot be
+verified with a governed tool, do not stop and do not ask
+permission to continue: mark that step "blocked — needs access",
+name the exact command for the human, and move on to the next step.
 
 ## Next actions
 At most three bullets: the single most valuable next step first,
