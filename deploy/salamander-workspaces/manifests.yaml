@@ -1,3 +1,16 @@
+# SUPPLY-CHAIN LANE (module 6, live 2026-08-27) — per-seat substrate applied
+# imperatively alongside this file (fold into manifests at next revision):
+#   * Secret pac-gitea-webhook (random) per seat ns — PaC webhook secret
+#   * Secret quay-push-secret copied from agent-office + linked to the
+#     'pipeline' SA (build pushes)
+#   * ORG-level gitea webhook per <user>-agents org -> PaC controller route
+#     (push + pull_request), secret = pac-gitea-webhook
+#   * ConfigMap chains-public-key per seat ns (Tekton Chains cosign.pub;
+#     key generated 2026-08-27 into openshift-pipelines/signing-secrets)
+#   * ApplicationSet seat-services-gitea (seat-services-appset.yaml) —
+#     promotion lane; AppProject agent-office sourceRepos widened to
+#     gitea <org>/* (agent-office repo cluster/agent-office-appproject.yaml)
+# Per-REPO piece (attendee-applied in module 6): PaC Repository CR.
 # Per-seat agent workspaces (Dean, 2026-08-25: "they will need a workspace
 # with their username in it"). One namespace per attendee, <user>-agent-workspace:
 #   * labeled for OpenShift GitOps management (the instance gets RBAC there,
