@@ -45,10 +45,11 @@ RTOK=$(oc get secret agent-office-rhdh-token -n rhdh-test -o jsonpath='{.data.to
 
 AGENTS=$(oc get agentworkstations -n "$NS" --no-headers -o custom-columns=N:.metadata.name 2>/dev/null || true)
 if [ -n "$ONLY" ]; then
+  # narrow to the named agent; an empty result falls through to the
+  # service-footprint matcher below
   AGENTS=$(printf '%s\n' $AGENTS | grep -x "$ONLY" || true)
-  [ -z "$AGENTS" ] && { echo "seat $SEAT: agent '$ONLY' not found in $NS"; exit 1; }
 fi
-if [ -z "$AGENTS" ]; then
+if [ -z "$AGENTS" ] && [ -z "$ONLY" ]; then
   echo "seat $SEAT: no agents in $NS — nothing to reset"
   exit 0
 fi
@@ -86,7 +87,7 @@ reset_service() {
   echo "  note: quay repo deanpeterson/${SEAT}-${REPO} keeps old digests (harmless; :main is overwritten on next build)"
 }
 
-if [ -n "$ONLY" ] && ! printf '%s\n' $AGENTS | grep -qx "$ONLY"; then
+if [ -n "$ONLY" ] && [ -z "$AGENTS" ]; then
   case "$ONLY" in
     *-agent-gitops|*-gitops) echo "seat $SEAT: '$ONLY' looks like a gitops repo, not an agent or service"; exit 1;;
   esac
