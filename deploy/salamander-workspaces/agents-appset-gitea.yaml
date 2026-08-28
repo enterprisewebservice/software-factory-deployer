@@ -1,0 +1,102 @@
+# Agents ApplicationSet (gitea) — ALL FIVE seat orgs. Live copy of the
+# deployer's agent-office-appset-gitea rendering; the original render
+# covered only user1-agents (found live 2026-08-28: seats 2-5 hires
+# published repos but never deployed). Milestone B: drive the j2 from
+# the seat list.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agent-office-agents-gitea
+  namespace: openshift-gitops
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+  - scmProvider:
+      cloneProtocol: https
+      filters:
+      - pathsExist:
+        - argocd/applicationset-managed
+        repositoryMatch: .*-(agent|autoresearch)-gitops$
+      gitea:
+        api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+        owner: user1-agents
+        tokenRef:
+          key: token
+          secretName: agent-office-gitea-scm
+      requeueAfterSeconds: 60
+  - scmProvider:
+      cloneProtocol: https
+      filters:
+      - pathsExist:
+        - argocd/applicationset-managed
+        repositoryMatch: .*-(agent|autoresearch)-gitops$
+      gitea:
+        api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+        owner: user2-agents
+        tokenRef:
+          key: token
+          secretName: agent-office-gitea-scm
+      requeueAfterSeconds: 60
+  - scmProvider:
+      cloneProtocol: https
+      filters:
+      - pathsExist:
+        - argocd/applicationset-managed
+        repositoryMatch: .*-(agent|autoresearch)-gitops$
+      gitea:
+        api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+        owner: user3-agents
+        tokenRef:
+          key: token
+          secretName: agent-office-gitea-scm
+      requeueAfterSeconds: 60
+  - scmProvider:
+      cloneProtocol: https
+      filters:
+      - pathsExist:
+        - argocd/applicationset-managed
+        repositoryMatch: .*-(agent|autoresearch)-gitops$
+      gitea:
+        api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+        owner: user4-agents
+        tokenRef:
+          key: token
+          secretName: agent-office-gitea-scm
+      requeueAfterSeconds: 60
+  - scmProvider:
+      cloneProtocol: https
+      filters:
+      - pathsExist:
+        - argocd/applicationset-managed
+        repositoryMatch: .*-(agent|autoresearch)-gitops$
+      gitea:
+        api: https://gitea-gitea.apps.salamander.aimlworkbench.com
+        owner: user5-agents
+        tokenRef:
+          key: token
+          secretName: agent-office-gitea-scm
+      requeueAfterSeconds: 60
+  template:
+    metadata:
+      finalizers:
+      - resources-finalizer.argocd.argoproj.io
+      labels:
+        app.kubernetes.io/managed-by: agent-office-applicationset
+      name: '{{ .organization }}-{{ trimSuffix "-gitops" .repository }}'
+    spec:
+      destination:
+        namespace: '{{ trimSuffix "-agents" .organization }}-agent-workspace'
+        server: https://kubernetes.default.svc
+      project: agent-office
+      source:
+        path: overlays/development
+        repoURL: '{{ .url }}'
+        targetRevision: '{{ .branch }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - ServerSideApply=true
