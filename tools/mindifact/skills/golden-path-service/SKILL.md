@@ -27,6 +27,17 @@ framework are yours to choose; these interfaces are not.
   crashes (`anyio.ClosedResourceError` storms, paused circuits). In
   Python FastMCP, construct with `stateless_http=True`. In other
   stacks, disable server-side session affinity for `/mcp`.
+- MCP SDK version: in Python pin `mcp>=1.29,<2` — BOTH bounds
+  matter. The platform's agents negotiate MCP protocol 2025-11-25;
+  the 1.12.x SDK tops out at 2025-06-18 and REJECTS the handshake,
+  so every governed call returns "rejected the MCP protocol
+  version" while plain curl probes still look fine. And mcp 2.x
+  renames FastMCP (`mcp.server.fastmcp` is gone —
+  `ModuleNotFoundError` at startup), so an unbounded `>=1.29`
+  crash-loops the pod the moment 2.x resolves. Do not copy an
+  older pin from a reference repository. Equivalent rule in other
+  stacks: the MCP library must support protocol revision
+  2025-11-25 or newer.
 - Read upstream endpoints from environment variables with sane
   defaults; never hardcode credentials.
 - Python + FastMCP trap: never put `from __future__ import
