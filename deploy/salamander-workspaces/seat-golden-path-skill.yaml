@@ -1,0 +1,121 @@
+# golden-path-service skill, delivered per seat as a digest-pinned
+# packageRef Skill CR (operator >= v1.7.53). The namespace grant means
+# every agent on the seat — assistant and any dev hires — carries the
+# golden-path service contract: root Dockerfile, port 8080, /healthz,
+# deploy manifest shape, and the verbatim .tekton pipeline template.
+# This is what makes module 6's scaffold deterministic across the
+# model's implementation choices.
+apiVersion: agentoffice.ai/v1alpha1
+kind: Skill
+metadata:
+  name: golden-path-service
+  namespace: user1-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: agent-office
+    agentoffice.ai/skill-tier: registry
+  annotations:
+    agentoffice.ai/registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+    agentoffice.ai/pack-ref: agent-office/golden-path-service:1.0.0
+spec:
+  displayName: "Golden Path Service"
+  description: "Scaffold and structure services for the ACME platform golden path. Use whenever building, scaffolding, restructuring, or fixing a service repository (microservice, MCP service, API) that the platform supply chain will build and deploy."
+  version: "1.0.0"
+  source:
+    packageRef:
+      ref: oci://quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skill-golden-path-service:1.0.0
+      digest: 12e2961bb6cc8709a81080e5e3579a700d6002eaaad3b017879ee043b433003c
+      pullSecretName: quay-pull-secret
+      insecureSkipTLSVerify: true
+
+---
+apiVersion: agentoffice.ai/v1alpha1
+kind: Skill
+metadata:
+  name: golden-path-service
+  namespace: user2-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: agent-office
+    agentoffice.ai/skill-tier: registry
+  annotations:
+    agentoffice.ai/registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+    agentoffice.ai/pack-ref: agent-office/golden-path-service:1.0.0
+spec:
+  displayName: "Golden Path Service"
+  description: "Scaffold and structure services for the ACME platform golden path. Use whenever building, scaffolding, restructuring, or fixing a service repository (microservice, MCP service, API) that the platform supply chain will build and deploy."
+  version: "1.0.0"
+  source:
+    packageRef:
+      ref: oci://quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skill-golden-path-service:1.0.0
+      digest: 12e2961bb6cc8709a81080e5e3579a700d6002eaaad3b017879ee043b433003c
+      pullSecretName: quay-pull-secret
+      insecureSkipTLSVerify: true
+
+---
+apiVersion: agentoffice.ai/v1alpha1
+kind: Skill
+metadata:
+  name: golden-path-service
+  namespace: user3-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: agent-office
+    agentoffice.ai/skill-tier: registry
+  annotations:
+    agentoffice.ai/registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+    agentoffice.ai/pack-ref: agent-office/golden-path-service:1.0.0
+spec:
+  displayName: "Golden Path Service"
+  description: "Scaffold and structure services for the ACME platform golden path. Use whenever building, scaffolding, restructuring, or fixing a service repository (microservice, MCP service, API) that the platform supply chain will build and deploy."
+  version: "1.0.0"
+  source:
+    packageRef:
+      ref: oci://quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skill-golden-path-service:1.0.0
+      digest: 12e2961bb6cc8709a81080e5e3579a700d6002eaaad3b017879ee043b433003c
+      pullSecretName: quay-pull-secret
+      insecureSkipTLSVerify: true
+
+---
+apiVersion: agentoffice.ai/v1alpha1
+kind: Skill
+metadata:
+  name: golden-path-service
+  namespace: user4-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: agent-office
+    agentoffice.ai/skill-tier: registry
+  annotations:
+    agentoffice.ai/registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+    agentoffice.ai/pack-ref: agent-office/golden-path-service:1.0.0
+spec:
+  displayName: "Golden Path Service"
+  description: "Scaffold and structure services for the ACME platform golden path. Use whenever building, scaffolding, restructuring, or fixing a service repository (microservice, MCP service, API) that the platform supply chain will build and deploy."
+  version: "1.0.0"
+  source:
+    packageRef:
+      ref: oci://quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skill-golden-path-service:1.0.0
+      digest: 12e2961bb6cc8709a81080e5e3579a700d6002eaaad3b017879ee043b433003c
+      pullSecretName: quay-pull-secret
+      insecureSkipTLSVerify: true
+
+---
+apiVersion: agentoffice.ai/v1alpha1
+kind: Skill
+metadata:
+  name: golden-path-service
+  namespace: user5-agent-workspace
+  labels:
+    app.kubernetes.io/managed-by: agent-office
+    agentoffice.ai/skill-tier: registry
+  annotations:
+    agentoffice.ai/registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+    agentoffice.ai/pack-ref: agent-office/golden-path-service:1.0.0
+spec:
+  displayName: "Golden Path Service"
+  description: "Scaffold and structure services for the ACME platform golden path. Use whenever building, scaffolding, restructuring, or fixing a service repository (microservice, MCP service, API) that the platform supply chain will build and deploy."
+  version: "1.0.0"
+  source:
+    packageRef:
+      ref: oci://quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skill-golden-path-service:1.0.0
+      digest: 12e2961bb6cc8709a81080e5e3579a700d6002eaaad3b017879ee043b433003c
+      pullSecretName: quay-pull-secret
+      insecureSkipTLSVerify: true
+
