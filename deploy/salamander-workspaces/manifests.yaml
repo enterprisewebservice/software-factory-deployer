@@ -5,6 +5,14 @@
 #     'pipeline' SA (build pushes)
 #   * ORG-level gitea webhook per <user>-agents org -> PaC controller route
 #     (push + pull_request), secret = pac-gitea-webhook
+#   * SYSTEM-level gitea webhook (admin/hooks, fires for every repo) ->
+#     OpenShift GitOps webhook endpoint
+#     https://openshift-gitops-server-openshift-gitops.apps.<domain>/api/webhook
+#     (push, json). Without it Argo only polls git every 3 min; the workshop
+#     promises merge->sync "within seconds" (Module 2). Create once per cluster:
+#     POST {gitea}/api/v1/admin/hooks  (admin basic auth)
+#     {"type":"gitea","active":true,"events":["push"],
+#      "config":{"url":"<argo-route>/api/webhook","content_type":"json"}}
 #   * ConfigMap chains-public-key per seat ns (Tekton Chains cosign.pub;
 #     key generated 2026-08-27 into openshift-pipelines/signing-secrets)
 #   * ApplicationSet seat-services-gitea (seat-services-appset.yaml) —
