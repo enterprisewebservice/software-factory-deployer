@@ -1,8 +1,17 @@
 # SUPPLY-CHAIN LANE (module 6, live 2026-08-27) — per-seat substrate applied
 # imperatively alongside this file (fold into manifests at next revision):
 #   * Secret pac-gitea-webhook (random) per seat ns — PaC webhook secret
-#   * Secret quay-push-secret copied from agent-office + linked to the
-#     'pipeline' SA (build pushes)
+#   * Secret quay-push-secret per seat ns + linked to the 'pipeline' SA
+#     (build pushes). Since 2026-08-27 it carries the ORG-LOCAL robot
+#     deanpeterson+pipeline — Quay refuses granting a foreign org's
+#     robot (rhdh+pipeline) on deanpeterson/* repos via the API, which
+#     failed user3's first build with 'authentication required'.
+#   * Quay repos deanpeterson/<user>-order-metrics PRE-CREATED (private)
+#     with deanpeterson+pipeline granted role admin — pushing cannot
+#     auto-create repos in an org the robot doesn't own. One-time per
+#     seat (quayadmin OAuth token):
+#       POST /api/v1/repository {namespace,repository,visibility}
+#       PUT  /api/v1/repository/deanpeterson/<repo>/permissions/user/deanpeterson+pipeline {"role":"admin"}
 #   * ORG-level gitea webhook per <user>-agents org -> PaC controller route
 #     (push + pull_request), secret = pac-gitea-webhook
 #   * SYSTEM-level gitea webhook (admin/hooks, fires for every repo) ->
