@@ -24,6 +24,12 @@ framework are yours to choose; these interfaces are not.
 - MCP services serve Streamable HTTP on `POST /mcp`.
 - Read upstream endpoints from environment variables with sane
   defaults; never hardcode credentials.
+- Python + FastMCP trap: never put `from __future__ import
+  annotations` in a module that defines MCP tools — postponed
+  evaluation turns parameter annotations into strings and tool
+  registration crashes at startup with
+  `TypeError: issubclass() arg 1 must be a class`. Use concrete
+  annotations in that module instead.
 
 ## deploy/deployment.yaml contract
 
@@ -34,6 +40,9 @@ framework are yours to choose; these interfaces are not.
 - `imagePullSecrets` naming `quay-pull-secret`.
 - `containerPort: 8080`; Service `port: 8080` with a named
   `targetPort`.
+- Labels: `app.kubernetes.io/name: <service>` on the Deployment's
+  selector and pod template AND as the Service's selector. Use this
+  exact key — platform tooling and dashboards select on it.
 - Readiness and liveness probes on `/healthz`.
 - Hardened securityContext (runAsNonRoot, drop ALL capabilities,
   no privilege escalation, RuntimeDefault seccomp) and explicit
