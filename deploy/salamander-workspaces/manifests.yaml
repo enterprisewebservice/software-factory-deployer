@@ -43,10 +43,16 @@
 # MATTERMOST SEATS (imperative, same reason): each seat needs a local
 # Mattermost account (username userN, the shared workshop password,
 # joined to team "agents") — Team edition has no OIDC, so these are
-# API-created. The operator's chat provisioning is enabled per-namespace
-# by replicating Secret mattermost-admin-token from agent-office into
-# each workspace; it then creates the agent's PRIVATE channel and
-# invites the seat owner automatically (operator >= v1.7.44).
+# API-created. Chat provisioning (private channel + owner invite,
+# operator >= v1.7.44) is opted in DECLARATIVELY since v1.7.56: the
+# namespace label agentoffice.ai/chat-provisioning: "enabled" (on the
+# Namespace blocks below) makes the operator use the ONE
+# mattermost-admin-token Secret in ITS OWN namespace
+# (agent-office-operator; copy it there from agent-office, imperative).
+# The old per-seat replication of that Secret is RETIRED — it parked a
+# Mattermost ADMIN credential inside tenant reach, which Module 3's
+# oc-get-secrets step surfaced live. A namespace-local Secret still
+# wins if present (legacy back-compat only; do not create new ones).
 #
 # GITEA SEAT TOKENS (imperative, same reason): the governed gitea-mcp
 # backend (agent-office cluster/gitea-mcp) authenticates per seat by
@@ -93,6 +99,7 @@ metadata:
   name: user1-agent-workspace
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
+    agentoffice.ai/chat-provisioning: "enabled"
     software-factory.redhat.com/seat: user1
     app.kubernetes.io/managed-by: software-factory-deployer
 ---
@@ -148,6 +155,7 @@ metadata:
   name: user2-agent-workspace
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
+    agentoffice.ai/chat-provisioning: "enabled"
     software-factory.redhat.com/seat: user2
     app.kubernetes.io/managed-by: software-factory-deployer
 ---
@@ -203,6 +211,7 @@ metadata:
   name: user3-agent-workspace
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
+    agentoffice.ai/chat-provisioning: "enabled"
     software-factory.redhat.com/seat: user3
     app.kubernetes.io/managed-by: software-factory-deployer
 ---
@@ -258,6 +267,7 @@ metadata:
   name: user4-agent-workspace
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
+    agentoffice.ai/chat-provisioning: "enabled"
     software-factory.redhat.com/seat: user4
     app.kubernetes.io/managed-by: software-factory-deployer
 ---
@@ -313,6 +323,7 @@ metadata:
   name: user5-agent-workspace
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
+    agentoffice.ai/chat-provisioning: "enabled"
     software-factory.redhat.com/seat: user5
     app.kubernetes.io/managed-by: software-factory-deployer
 ---
