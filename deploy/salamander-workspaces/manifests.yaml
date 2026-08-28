@@ -1,11 +1,16 @@
 # SUPPLY-CHAIN LANE (module 6, live 2026-08-27) — per-seat substrate applied
 # imperatively alongside this file (fold into manifests at next revision):
 #   * Secret pac-gitea-webhook (random) per seat ns — PaC webhook secret
-#   * Secret quay-push-secret per seat ns + linked to the 'pipeline' SA
-#     (build pushes). Since 2026-08-27 it carries the ORG-LOCAL robot
+#   * Secret quay-push-secret per seat ns + LINKED to the 'pipeline' SA
+#     (build pushes): `oc secrets link pipeline quay-push-secret
+#     --for=pull,mount -n <seat-ns>`. The LINK is load-bearing — the
+#     buildah push step reads registry auth from the SA's linked
+#     dockercfg secrets, and a seat with the secret present but
+#     unlinked fails step-push with 'authentication required' (user3's
+#     first two builds; user1 was linked by hand during authoring).
+#     Since 2026-08-27 it carries the ORG-LOCAL robot
 #     deanpeterson+pipeline — Quay refuses granting a foreign org's
-#     robot (rhdh+pipeline) on deanpeterson/* repos via the API, which
-#     failed user3's first build with 'authentication required'.
+#     robot (rhdh+pipeline) on deanpeterson/* repos via the API.
 #   * Quay repos deanpeterson/<user>-order-metrics PRE-CREATED (private)
 #     with deanpeterson+pipeline granted role admin — pushing cannot
 #     auto-create repos in an org the robot doesn't own. One-time per
