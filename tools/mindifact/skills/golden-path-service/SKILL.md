@@ -21,7 +21,12 @@ framework are yours to choose; these interfaces are not.
 
 - The service listens on port 8080.
 - `GET /healthz` returns `{"ok": true}`.
-- MCP services serve Streamable HTTP on `POST /mcp`.
+- MCP services serve Streamable HTTP on `POST /mcp`, and MUST run
+  STATELESS: the platform's MCP gateway broker retries and re-routes
+  across your replicas, so per-session server state strands and
+  crashes (`anyio.ClosedResourceError` storms, paused circuits). In
+  Python FastMCP, construct with `stateless_http=True`. In other
+  stacks, disable server-side session affinity for `/mcp`.
 - Read upstream endpoints from environment variables with sane
   defaults; never hardcode credentials.
 - Python + FastMCP trap: never put `from __future__ import
