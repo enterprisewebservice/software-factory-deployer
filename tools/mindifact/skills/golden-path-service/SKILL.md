@@ -25,8 +25,14 @@ framework are yours to choose; these interfaces are not.
   STATELESS: the platform's MCP gateway broker retries and re-routes
   across your replicas, so per-session server state strands and
   crashes (`anyio.ClosedResourceError` storms, paused circuits). In
-  Python FastMCP, construct with `stateless_http=True`. In other
-  stacks, disable server-side session affinity for `/mcp`.
+  Python FastMCP, construct with `stateless_http=True` AND
+  `host="0.0.0.0"`. The host argument is not about the socket (your
+  ASGI server binds that) — without it the 1.29+ SDK assumes a
+  localhost server and arms its DNS-rebinding protection, so every
+  call arriving through the platform gateway is rejected with
+  "Invalid Host header" while localhost probes pass. In other
+  stacks, disable server-side session affinity for `/mcp` and any
+  host-header allowlist.
 - MCP SDK version: in Python pin `mcp>=1.29,<2` — BOTH bounds
   matter. The platform's agents negotiate MCP protocol 2025-11-25;
   the 1.12.x SDK tops out at 2025-06-18 and REJECTS the handshake,
