@@ -411,50 +411,59 @@ spec:
     insecureEdgeTerminationPolicy: Redirect
   wildcardPolicy: None
 ---
-# Custom-domain routes: TLS terminates at the edge haproxy (sibling
-# pattern: nl2sql.ai / upstreambeat.ai routes carry no cert).
-apiVersion: route.openshift.io/v1
-kind: Route
+# Public domain wiring (DNS: Route 53 -> cluster edge). Same pattern as
+# nl2sql.ai: an Ingress the router materializes as edge Routes, with the
+# cert inlined from handsonmode-tls once cert-manager (letsencrypt-http01)
+# issues it. The .com hosts route to the same pod, where traefik's
+# redirect-com router 301s them to the canonical .ai.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: handsonmode-ai
+  name: handsonmode-domain
   namespace: showroom-handsonmode
   annotations:
-    haproxy.router.openshift.io/timeout: 1h
+    cert-manager.io/cluster-issuer: letsencrypt-http01
+    route.openshift.io/termination: edge
+    haproxy.router.openshift.io/redirect-to-https: "true"
 spec:
-  host: handsonmode.ai
-  to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: 8080 }
-  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: handsonmode-ai-www
-  namespace: showroom-handsonmode
-spec:
-  host: www.handsonmode.ai
-  to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: 8080 }
-  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: handsonmode-com
-  namespace: showroom-handsonmode
-spec:
-  host: handsonmode.com
-  to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: 8080 }
-  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: handsonmode-com-www
-  namespace: showroom-handsonmode
-spec:
-  host: www.handsonmode.com
-  to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: 8080 }
-  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
+  ingressClassName: openshift-default
+  tls:
+    - hosts: [handsonmode.ai, www.handsonmode.ai, handsonmode.com, www.handsonmode.com]
+      secretName: handsonmode-tls
+  rules:
+    - host: handsonmode.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: showroom-handsonmode
+                port: { number: 8080 }
+    - host: www.handsonmode.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: showroom-handsonmode
+                port: { number: 8080 }
+    - host: handsonmode.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: showroom-handsonmode
+                port: { number: 8080 }
+    - host: www.handsonmode.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: showroom-handsonmode
+                port: { number: 8080 }
