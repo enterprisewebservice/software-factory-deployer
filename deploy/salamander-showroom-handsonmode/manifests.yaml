@@ -62,7 +62,23 @@ data:
           loadBalancer:
             servers:
               - url: "http://127.0.0.1:8001"
+        redirect-com:
+          rule: "Host(`handsonmode.com`) || Host(`www.handsonmode.com`)"
+          entryPoints:
+            - web
+          middlewares:
+            - to-canonical
+          service: showroom
+          priority: 100
+
       middlewares:
+        # .com is a doorway; .ai is the address. Permanent redirect keeps
+        # search and shared links canonical.
+        to-canonical:
+          redirectRegex:
+            regex: "^https?://(www\\.)?handsonmode\\.com/(.*)"
+            replacement: "https://handsonmode.ai/${2}"
+            permanent: true
         # Guide content must always revalidate: the nookbag viewer fetches
         # module HTML that is otherwise served cache-control:private with no
         # max-age, and browser heuristic caching keeps attendees on stale
@@ -403,3 +419,51 @@ spec:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
   wildcardPolicy: None
+---
+# Custom-domain routes: TLS terminates at the edge haproxy (sibling
+# pattern: nl2sql.ai / upstreambeat.ai routes carry no cert).
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: handsonmode-ai
+  namespace: showroom-handsonmode
+  annotations:
+    haproxy.router.openshift.io/timeout: 1h
+spec:
+  host: handsonmode.ai
+  to: { kind: Service, name: showroom-handsonmode }
+  port: { targetPort: http }
+  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: handsonmode-ai-www
+  namespace: showroom-handsonmode
+spec:
+  host: www.handsonmode.ai
+  to: { kind: Service, name: showroom-handsonmode }
+  port: { targetPort: http }
+  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: handsonmode-com
+  namespace: showroom-handsonmode
+spec:
+  host: handsonmode.com
+  to: { kind: Service, name: showroom-handsonmode }
+  port: { targetPort: http }
+  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: handsonmode-com-www
+  namespace: showroom-handsonmode
+spec:
+  host: www.handsonmode.com
+  to: { kind: Service, name: showroom-handsonmode }
+  port: { targetPort: http }
+  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
