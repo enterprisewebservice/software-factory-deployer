@@ -27,71 +27,62 @@ data:
     http:
       routers:
         showroom:
-          rule: "PathPrefix(`/`)"
+          rule: PathPrefix(`/`)
           entryPoints:
-            - web
+          - web
           service: showroom
           middlewares:
-            - guide-no-cache
+          - guide-no-cache
           priority: 1
         terminal:
-          rule: "PathPrefix(`/terminal`)"
+          rule: PathPrefix(`/terminal`)
           entryPoints:
-            - web
+          - web
           service: terminal
           middlewares:
-            - terminal-stripprefix
+          - terminal-stripprefix
           priority: 10
         wetty:
-          rule: "PathPrefix(`/wetty`)"
+          rule: PathPrefix(`/wetty`)
           entryPoints:
-            - web
+          - web
           service: wetty
           priority: 10
-
+        redirect-com:
+          rule: Host(`handsonmode.com`) || Host(`www.handsonmode.com`)
+          entryPoints:
+          - web
+          middlewares:
+          - to-canonical
+          service: showroom
+          priority: 100
       services:
         showroom:
           loadBalancer:
             servers:
-              - url: "http://127.0.0.1:8000"
+            - url: http://127.0.0.1:8000
         terminal:
           loadBalancer:
             servers:
-              - url: "http://127.0.0.1:7681"
+            - url: http://127.0.0.1:7681
         wetty:
           loadBalancer:
             servers:
-              - url: "http://127.0.0.1:8001"
-        redirect-com:
-          rule: "Host(`handsonmode.com`) || Host(`www.handsonmode.com`)"
-          entryPoints:
-            - web
-          middlewares:
-            - to-canonical
-          service: showroom
-          priority: 100
-
+            - url: http://127.0.0.1:8001
       middlewares:
-        # .com is a doorway; .ai is the address. Permanent redirect keeps
-        # search and shared links canonical.
         to-canonical:
           redirectRegex:
-            regex: "^https?://(www\\.)?handsonmode\\.com/(.*)"
-            replacement: "https://handsonmode.ai/${2}"
+            regex: ^https?://(www\.)?handsonmode\.com/(.*)
+            replacement: https://handsonmode.ai/${2}
             permanent: true
-        # Guide content must always revalidate: the nookbag viewer fetches
-        # module HTML that is otherwise served cache-control:private with no
-        # max-age, and browser heuristic caching keeps attendees on stale
-        # pages after content updates. no-cache still allows 304 revalidation,
-        # so rebuilds become visible on a plain reload.
         guide-no-cache:
           headers:
             customResponseHeaders:
-              Cache-Control: "no-cache"
+              Cache-Control: no-cache
         terminal-stripprefix:
           stripPrefix:
             prefixes:
-              - "/terminal"
+            - /terminal
 ---
 # Source: showroom-single-pod/templates/proxy/configmap-traefik-static.yaml
 apiVersion: v1
