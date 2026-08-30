@@ -432,7 +432,7 @@ metadata:
 spec:
   host: handsonmode.ai
   to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: http }
+  port: { targetPort: 8080 }
   tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
 ---
 apiVersion: route.openshift.io/v1
@@ -443,7 +443,7 @@ metadata:
 spec:
   host: www.handsonmode.ai
   to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: http }
+  port: { targetPort: 8080 }
   tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
 ---
 apiVersion: route.openshift.io/v1
@@ -454,7 +454,7 @@ metadata:
 spec:
   host: handsonmode.com
   to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: http }
+  port: { targetPort: 8080 }
   tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
 ---
 apiVersion: route.openshift.io/v1
@@ -465,5 +465,5 @@ metadata:
 spec:
   host: www.handsonmode.com
   to: { kind: Service, name: showroom-handsonmode }
-  port: { targetPort: http }
+  port: { targetPort: 8080 }
   tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
