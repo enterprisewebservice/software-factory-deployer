@@ -1,0 +1,90 @@
+# PostgreSQL for OpenShift AI Models-as-a-Service (RHOAI 3.4+ requires
+# a self-provisioned PG 14+ for API-key lifecycle management; RHOAI
+# does not ship one).
+#
+# Secrets are created out-of-band (never in git):
+#   maas-db/maas-db-credentials          POSTGRESQL_USER/PASSWORD/DATABASE
+#   redhat-ods-applications/maas-db-config  DB_CONNECTION_URL (what maas-api reads)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: maas-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maas-db-data
+  namespace: maas-db
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maas-db
+  namespace: maas-db
+  labels:
+    app: maas-db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: maas-db
+  template:
+    metadata:
+      labels:
+        app: maas-db
+    spec:
+      containers:
+      - name: postgresql
+        image: registry.redhat.io/rhel9/postgresql-16:latest
+        envFrom:
+        - secretRef:
+            name: maas-db-credentials
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/pgsql/data
+        readinessProbe:
+          exec:
+            command: ["/usr/libexec/check-container"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["/usr/libexec/check-container", "--live"]
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: maas-db-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maas-db
+  namespace: maas-db
+  labels:
+    app: maas-db
+spec:
+  selector:
+    app: maas-db
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: 5432
