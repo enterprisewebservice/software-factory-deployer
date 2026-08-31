@@ -53,6 +53,53 @@ data:
     general_settings:
       master_key: os.environ/LITELLM_MASTER_KEY
 ---
+# TLS front for the MaaS data path: envoy originates TLS to external
+# models; LiteLLM itself stays plain HTTP on 4000 for in-cluster
+# consumers (agent gateways, probes).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-desk-tls-proxy
+  namespace: model-desk
+data:
+  nginx.conf: |
+    error_log /dev/stderr;
+    pid /tmp/nginx.pid;
+    events { worker_connections 512; }
+    http {
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      access_log /dev/stdout;
+      server {
+        listen 8443 ssl;
+        ssl_certificate /etc/tls/tls.crt;
+        ssl_certificate_key /etc/tls/tls.key;
+        client_max_body_size 20m;
+        # MaaS forwards the model-scoped public path verbatim
+        # (/models-as-a-service/<model>/v1/...); LiteLLM serves /v1/...
+        # — strip the scope prefix, pass everything else through.
+        location ~ ^/models-as-a-service/[^/]+(?<rest>/.*)$ {
+          proxy_pass http://127.0.0.1:4000$rest;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          # MaaS TP does not inject the provider credential on the
+          # external-model data path (BBR not rendered here); this leg
+          # only carries traffic that already passed MaaS auth+quota,
+          # so the sidecar swaps in LiteLLM's key (secret-mounted).
+          include /etc/tls-auth/auth.conf;
+          proxy_read_timeout 300s;
+          proxy_buffering off;
+        }
+        location / {
+          proxy_pass http://127.0.0.1:4000;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_read_timeout 300s;
+          proxy_buffering off;
+        }
+      }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -108,10 +155,41 @@ spec:
           limits:
             cpu: "1"
             memory: 1Gi
+      - name: tls-proxy
+        image: registry.access.redhat.com/ubi9/nginx-124:latest
+        command: ["nginx", "-c", "/etc/nginx-custom/nginx.conf", "-g", "daemon off;"]
+        ports:
+        - containerPort: 8443
+        volumeMounts:
+        - name: tls-proxy-config
+          mountPath: /etc/nginx-custom
+          readOnly: true
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        - name: tls-auth
+          mountPath: /etc/tls-auth
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
       volumes:
       - name: config
         configMap:
           name: model-desk-config
+      - name: tls-proxy-config
+        configMap:
+          name: model-desk-tls-proxy
+      - name: tls
+        secret:
+          secretName: model-desk-tls
+      - name: tls-auth
+        secret:
+          secretName: model-desk-proxy-auth
       - name: gcp-adc
         secret:
           secretName: model-desk-gcp-adc
@@ -124,6 +202,8 @@ metadata:
   namespace: model-desk
   labels:
     app: model-desk
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: model-desk-tls
 spec:
   selector:
     app: model-desk
@@ -131,3 +211,8 @@ spec:
   - name: http
     port: 4000
     targetPort: 4000
+  # MaaS's ExternalModel data path originates TLS (external providers
+  # are assumed HTTPS) — terminate it on the nginx sidecar.
+  - name: https-maas
+    port: 443
+    targetPort: 8443
