@@ -111,6 +111,25 @@ data:
       checkNewVersion: false
       sendAnonymousUsage: false
 ---
+# Hands-On Mode edition branding: replaces the terminal image's Red Hat
+# login banner (mounted over /etc/motd.d/rhdp, which ~/.bashrc cats).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: showroom-handsonmode-branding
+  namespace: showroom-handsonmode
+data:
+  motd: |
+    ----------------------------------------------------------------------------
+                             Hands-On Mode  |  live seat
+    ----------------------------------------------------------------------------
+
+    This is a real shell on real infrastructure, scoped to your seat.
+    Follow the course guide on the left. Anything you break, resets.
+
+                                                              handsonmode.ai
+    ----------------------------------------------------------------------------
+---
 # Source: showroom-single-pod/templates/proxy/configmap-user-data.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -278,8 +297,12 @@ spec:
           value: "main"
         - name: ANTORA_PLAYBOOK
           value: "site-handsonmode.yml"
+        # Hands-On Mode edition: brand-patched copy of the upstream nookbag
+        # release (favicon + title — upstream hardcodes demo.redhat.com with
+        # no config hook). Ships in the workshop repo, already cloned into
+        # the pod by git-cloner; derivation: ui-handsonmode/build-nookbag-bundle.sh.
         - name: ZT_BUNDLE
-          value: "https://github.com/rhpds/nookbag/releases/download/nookbag-v0.4.0/nookbag-v0.4.0.zip"
+          value: "file:///showroom/repo/ui-handsonmode/nookbag-handsonmode-v0.4.0.zip"
         - name: ZT_UI_ENABLED
           value: "true"
         - name: SHOWROOM_UI_CONFIG
@@ -338,6 +361,11 @@ spec:
           mountPath: /home/lab-user
         - name: terminal-data-ssh # to enable ssh out of the container
           mountPath: /data/.ssh
+        # Hands-On Mode edition: shadow the image's Red Hat login banner
+        # (~lab-user/.bashrc cats this exact path).
+        - name: branding
+          mountPath: /etc/motd.d/rhdp
+          subPath: motd
         ports:
         - containerPort: 7681
           protocol: TCP
@@ -390,6 +418,9 @@ spec:
       - name: terminal-lab-user-home
         persistentVolumeClaim:
           claimName: showroom-handsonmode-terminal-lab-user-home
+      - name: branding
+        configMap:
+          name: showroom-handsonmode-branding
 ---
 # Source: showroom-single-pod/templates/proxy/route.yaml
 apiVersion: route.openshift.io/v1
