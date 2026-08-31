@@ -29,6 +29,27 @@ data:
         litellm_params:
           model: openai/gpt-4o
           api_key: os.environ/OPENAI_API_KEY
+      # Claude via the Red Hat work subscription on Google Vertex AI
+      # (project itpc-gcp-global-revenue-claude, region global — per
+      # the internal Claude Code install instructions). Credentials:
+      # Secret model-desk-gcp-adc, key adc.json (a gcloud
+      # application-default login file), mounted at /etc/gcp —
+      # created out-of-band, never in git. Until it exists these
+      # models error per-call and everything else keeps serving.
+      # Anthropic has no 128-entry tools[] cap, so full workshop
+      # seats (~200 tools) work on this lane.
+      - model_name: claude-sonnet-4-5
+        litellm_params:
+          model: vertex_ai/claude-sonnet-4-5@20250929
+          vertex_project: itpc-gcp-global-revenue-claude
+          vertex_location: global
+          vertex_credentials: /etc/gcp/adc.json
+      - model_name: claude-haiku-4-5
+        litellm_params:
+          model: vertex_ai/claude-haiku-4-5@20251001
+          vertex_project: itpc-gcp-global-revenue-claude
+          vertex_location: global
+          vertex_credentials: /etc/gcp/adc.json
     general_settings:
       master_key: os.environ/LITELLM_MASTER_KEY
 ---
@@ -63,6 +84,9 @@ spec:
         - name: config
           mountPath: /etc/litellm
           readOnly: true
+        - name: gcp-adc
+          mountPath: /etc/gcp
+          readOnly: true
         livenessProbe:
           httpGet:
             path: /health/liveliness
@@ -88,6 +112,10 @@ spec:
       - name: config
         configMap:
           name: model-desk-config
+      - name: gcp-adc
+        secret:
+          secretName: model-desk-gcp-adc
+          optional: true
 ---
 apiVersion: v1
 kind: Service
