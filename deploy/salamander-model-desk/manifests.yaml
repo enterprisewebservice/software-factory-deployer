@@ -53,6 +53,19 @@ data:
           vertex_project: itpc-gcp-global-revenue-claude
           vertex_location: global
           vertex_credentials: /etc/gcp/adc.json
+      # Red Hat AI Services BU LiteMaaS (the BU meters our shared key;
+      # OUR MaaS adds per-user budgets on top). Key: Secret
+      # model-desk-litemaas (out-of-band copy of agent-office/litemaas-api-key).
+      - model_name: Qwen3.8-27B
+        litellm_params:
+          model: openai/Qwen3.8-27B
+          api_base: https://litemaas.rhoai.rh-aiservices-bu.com/v1
+          api_key: os.environ/LITEMAAS_API_KEY
+      - model_name: Qwen3.6-35B-A3B
+        litellm_params:
+          model: openai/Qwen3.6-35B-A3B
+          api_base: https://litemaas.rhoai.rh-aiservices-bu.com/v1
+          api_key: os.environ/LITEMAAS_API_KEY
       - model_name: claude-sonnet-4-5
         litellm_params:
           model: vertex_ai/claude-sonnet-4-5@20250929
@@ -140,6 +153,9 @@ spec:
         envFrom:
         - secretRef:
             name: model-desk-secrets
+        - secretRef:
+            name: model-desk-litemaas
+            optional: true
         ports:
         - containerPort: 4000
         volumeMounts:
