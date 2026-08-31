@@ -38,6 +38,21 @@ data:
       # models error per-call and everything else keeps serving.
       # Anthropic has no 128-entry tools[] cap, so full workshop
       # seats (~200 tools) work on this lane.
+      # Enabled-model sweep 2026-08-31: claude-sonnet-5 is the strongest
+      # the project allows (fable-5/opus-5 are catalog-listed but not
+      # enabled); claude-opus-4-6 is the strongest Opus-class.
+      - model_name: claude-sonnet-5
+        litellm_params:
+          model: vertex_ai/claude-sonnet-5
+          vertex_project: itpc-gcp-global-revenue-claude
+          vertex_location: global
+          vertex_credentials: /etc/gcp/adc.json
+      - model_name: claude-opus-4-6
+        litellm_params:
+          model: vertex_ai/claude-opus-4-6
+          vertex_project: itpc-gcp-global-revenue-claude
+          vertex_location: global
+          vertex_credentials: /etc/gcp/adc.json
       - model_name: claude-sonnet-4-5
         litellm_params:
           model: vertex_ai/claude-sonnet-4-5@20250929
