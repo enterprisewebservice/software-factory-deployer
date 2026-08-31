@@ -53,6 +53,32 @@ data:
           vertex_project: itpc-gcp-global-revenue-claude
           vertex_location: global
           vertex_credentials: /etc/gcp/adc.json
+      # Admin personal-API flagships (Dean's metered OpenAI key; the
+      # old "5.6-sol is subscription-only" note is stale — live-tested
+      # BEST-OK on api.openai.com 2026-08-31).
+      - model_name: gpt-5.6-sol
+        litellm_params:
+          model: openai/gpt-5.6-sol
+          api_key: os.environ/OPENAI_API_KEY
+      - model_name: gpt-5.6-terra
+        litellm_params:
+          model: openai/gpt-5.6-terra
+          api_key: os.environ/OPENAI_API_KEY
+      - model_name: gpt-5.6-luna
+        litellm_params:
+          model: openai/gpt-5.6-luna
+          api_key: os.environ/OPENAI_API_KEY
+      # Anthropic API flagships — activate when Secret
+      # model-desk-anthropic (ANTHROPIC_API_KEY) exists; until then
+      # these error per-call and everything else keeps serving.
+      - model_name: claude-fable-5
+        litellm_params:
+          model: anthropic/claude-fable-5
+          api_key: os.environ/ANTHROPIC_API_KEY
+      - model_name: claude-opus-5
+        litellm_params:
+          model: anthropic/claude-opus-5
+          api_key: os.environ/ANTHROPIC_API_KEY
       # Red Hat AI Services BU LiteMaaS (the BU meters our shared key;
       # OUR MaaS adds per-user budgets on top). Key: Secret
       # model-desk-litemaas (out-of-band copy of agent-office/litemaas-api-key).
@@ -155,6 +181,9 @@ spec:
             name: model-desk-secrets
         - secretRef:
             name: model-desk-litemaas
+            optional: true
+        - secretRef:
+            name: model-desk-anthropic
             optional: true
         ports:
         - containerPort: 4000
