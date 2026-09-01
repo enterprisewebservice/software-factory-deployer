@@ -10,9 +10,9 @@ workshop instance.
 | Public | `/`, `/hub/assets/*` | landing page (hub assets deliberately NOT under `/assets/` — Showroom's shell loads `./assets/index-*.js`) |
 | Auth | `/oauth/*` | **OpenShift oauth-proxy** (release-payload image) → cluster OAuth server (`idp=factory-sso` hint) → Keycloak realm `factory` |
 | Signed-in | `/hub/mylab.html`, `/hub/admin.html`, `/api/*` | workbench page (provision, credentials, links, *Restart workshop*), admin seats page, broker API |
-| Gated | everything else (`/index.html`, `/modules/*`, `/_/*`, `/terminal`, `/wetty`, …) | the person's **own** Showroom (`showroom-<handle>.svc`), same paths, resolved per request via nginx `auth_request` → broker; `/workshop/agents-as-staff/` is the door and redirects to `/index.html` |
+| Workshop | `https://showroom-<handle>-showroom-<handle>.apps…` (the seat's **own** hostname) | guarded by the seat's own Red Hat oauth-proxy sidecar with a SubjectAccessReview (`get services` in `showroom-<handle>`) — only the owner and cluster admins pass; the hub only links to it (`/workshop/…` → workbench page) |
 
-Showroom is not subpath-aware (the guide, assets and the web terminal use absolute paths), so the hub owns only `/`, `/hub/*` and `/api/*` and proxies the whole root per seat — the same shape as the handsonmode.ai hub. Everything is Red Hat platform components plus a small broker: no community proxies, no
+The hub never proxies Showroom: a proxy would have to know Showroom's URL layout (that smell produced a terminal 404 and a blank shell before this design). Each seat is on its own hostname behind its own oauth-proxy, exactly how OpenShift guards any workload. Everything is Red Hat platform components plus a small broker: no community proxies, no
 custom identity providers, nothing in cluster auth config is touched.
 
 ## Identity model
@@ -48,7 +48,7 @@ custom identity providers, nothing in cluster auth config is touched.
 
 ## A seat, minted per person (`files/provision-seat.py`, Job `provision-<handle>`)
 
-**Keycloak group `attendees`** (the genesis template's `gitProvider: auto` publishes to Gitea only for `memberOf: attendees` entities — everyone else goes to `publish:github` into the platform GitHub org) → handle = DNS-safe form of the username (`seatlib.sanitize`, collision-suffixed; recorded in
+**Keycloak group `attendees`** (the genesis template's `gitProvider: auto` publishes to Gitea only for `memberOf: attendees` entities — everyone else goes to `publish:github` into the platform GitHub org) → seat host guard: SA `showroom-<handle>` is the OAuth client (`oauth-redirectreference` → its Route), oauth-proxy sidecar (`--openshift-sar`), cookie Secret `showroom-<handle>-proxy`, RoleBinding `view` for the owner in `showroom-<handle>` → handle = DNS-safe form of the username (`seatlib.sanitize`, collision-suffixed; recorded in
 ConfigMap `factory-seats`) → `<handle>-agent-workspace` (RoleBindings for the user and the
 terminal SA, ResourceQuota, LimitRange, isolation NetworkPolicy, codex ExternalSecret,
 label `agentoffice.ai/managed=true` for operator discovery) → `showroom-<handle>` (from
