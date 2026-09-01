@@ -154,6 +154,37 @@ try:
         if code not in (201,):
             fail(f"gitea org create -> {code}")
 
+    step("gitea seat token (agent gateway)")
+    # The seat's agent reaches Gitea through its gateway's MCP header,
+    # which the operator renders from Secret <handle>-gitea-token (key
+    # GITEA_TOKEN) in the workspace — the same contract user1..5 fill
+    # from Vault via the refresher. Dynamic seats mint the token here
+    # with the Gitea admin acting as the user (Sudo): scoped, recorded
+    # by id in the seat Secret, revoked on Remove. No user password.
+    have_secret = subprocess.run(["oc", "get", "secret", f"{HANDLE}-gitea-token", "-n", NS], capture_output=True).returncode == 0
+    if not have_secret:
+        code, tok = http("POST", f"{G}/users/{HANDLE}/tokens",
+                         {"name": "seat-agent", "scopes": ["write:repository", "write:organization", "write:issue", "read:user"]},
+                         auth=auth, headers={"Sudo": HANDLE})
+        if code != 201:
+            # a stale token of the same name blocks re-minting: drop it and retry once
+            code_l, toks = http("GET", f"{G}/users/{HANDLE}/tokens", auth=auth, headers={"Sudo": HANDLE})
+            for t in (toks or []) if code_l == 200 else []:
+                if t.get("name") == "seat-agent":
+                    http("DELETE", f"{G}/users/{HANDLE}/tokens/{t['id']}", auth=auth, headers={"Sudo": HANDLE})
+            code, tok = http("POST", f"{G}/users/{HANDLE}/tokens",
+                             {"name": "seat-agent", "scopes": ["write:repository", "write:organization", "write:issue", "read:user"]},
+                             auth=auth, headers={"Sudo": HANDLE})
+        if code != 201:
+            fail(f"gitea token mint -> {code}")
+        gsec = {"apiVersion": "v1", "kind": "Secret",
+                "metadata": {"name": f"{HANDLE}-gitea-token", "namespace": NS,
+                             "labels": {"app.kubernetes.io/managed-by": "factory-hub", "factory-hub.redhat.com/seat": HANDLE}},
+                "type": "Opaque", "data": {"GITEA_TOKEN": base64.b64encode(tok["sha1"].encode()).decode()}}
+        S.oc("apply", "-f", "-", input=json.dumps(gsec))
+        S.oc("patch", "secret", f"seat-{HANDLE}", "-n", HUB_NS, "--type=merge",
+             "-p", json.dumps({"data": {"gitea_token_id": base64.b64encode(str(tok["id"]).encode()).decode()}}))
+
     step("argo applicationset generators")
     for name in ("agent-office-agents-gitea", "seat-services-gitea"):
         o = json.loads(S.oc("get", "applicationset", name, "-n", "openshift-gitops", "-o", "json"))

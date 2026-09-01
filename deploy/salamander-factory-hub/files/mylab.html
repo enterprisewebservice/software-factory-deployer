@@ -49,7 +49,7 @@
 </main>
 <script>
 const view = document.getElementById('view');
-const STEPS = ['seat record','openshift user + groups','workspace namespace + policy','operator discovery label','gitea user + org','argo applicationset generators','argo rbac rows','mattermost account','seat showroom','mark ready'];
+const STEPS = ['seat record','openshift user + groups','workspace namespace + policy','operator discovery label','gitea user + org','gitea seat token (agent gateway)','argo applicationset generators','argo rbac rows','mattermost account','seat showroom','mark ready'];
 let timer = null;
 async function api(path, method='GET') { const r = await fetch(path, {method, credentials:'include', headers:{'Accept':'application/json'}}); return {ok:r.ok, status:r.status, data: await r.json().catch(()=>({}))}; }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

@@ -62,10 +62,16 @@ if len(keep) != len(pol.splitlines()):
     S.oc("patch", "argocd", "openshift-gitops", "-n", "openshift-gitops", "--type=merge",
          "-p", json.dumps({"spec": {"rbac": {"policy": "\n".join(keep) + "\n"}}}))
 
-print("== gitea org + user ==", flush=True)
+print("== gitea token + org + user ==", flush=True)
 g = secret_data("gitea-admin-credentials", "gitea")
 G = f"https://gitea-gitea.{S.APPS}/api/v1"
 auth = (g["username"], g["password"])
+try:
+    tid = secret_data(f"seat-{H}", S.HUB_NS).get("gitea_token_id")
+    if tid:
+        print("  token revoke:", http("DELETE", f"{G}/users/{H}/tokens/{tid}", auth=auth, headers={"Sudo": H}))
+except Exception as e:
+    print("  token: none recorded", str(e)[:60])
 print("  org:", http("DELETE", f"{G}/orgs/{ORG}", auth=auth), " user:", http("DELETE", f"{G}/admin/users/{H}?purge=true", auth=auth))
 
 print("== mattermost account (deactivate) ==", flush=True)
