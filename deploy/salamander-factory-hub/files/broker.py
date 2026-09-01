@@ -182,6 +182,8 @@ class H(BaseHTTPRequestHandler):
         if action == "deprovision":
             if self.user() not in ADMINS:
                 return self.send(403, {"error": "admins only"})
+            if job_active(f"provision-{h}") or job_active(f"reset-{h}"):
+                return self.send(409, {"error": "a provision/reset job is still running for this seat — wait for it to finish"})
             write_seat(h, dict(rec or {}, phase="removing"))
             ok = run_job(f"deprovision-{h}", ["python3", "/scripts/deprovision-seat.py"], {"SEAT_HANDLE": h, "SEAT_USER": u})
             return self.send(202 if ok else 500, {"phase": "removing" if ok else "error"})
