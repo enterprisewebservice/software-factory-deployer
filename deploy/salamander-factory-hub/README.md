@@ -102,3 +102,12 @@ entity for the person shows `attendees` (`devhub_ready` from the broker). Signin
 GitHub broker changes nothing here — the routing never looks at GitHub identity; nobody needs a
 GitHub account or any GitHub setup.
 
+## oauth-proxy gotcha: never link to `/oauth/start`
+
+OpenShift's oauth-proxy ignores the `rd` query parameter and records the **request URI it was
+called with** as the post-login return target. A login started at `/oauth/start?rd=/x` therefore
+returns the browser to `/oauth/start?rd=/x`, which starts another (instant) login — an infinite
+redirect loop, seen live on the first real signup (2026-09-01). Start every login by navigating
+to the protected page itself (`/workshop/agents-as-staff/`, `/hub/mylab.html`); the proxy signs
+the person in and returns them there.
+
