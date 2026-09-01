@@ -7,12 +7,12 @@ workshop instance.
 
 | Tier | Path | What |
 |---|---|---|
-| Public | `/`, `/assets/*` | landing page |
+| Public | `/`, `/hub/assets/*` | landing page (hub assets deliberately NOT under `/assets/` — Showroom's shell loads `./assets/index-*.js`) |
 | Auth | `/oauth/*` | **OpenShift oauth-proxy** (release-payload image) → cluster OAuth server (`idp=factory-sso` hint) → Keycloak realm `factory` |
 | Signed-in | `/hub/mylab.html`, `/hub/admin.html`, `/api/*` | workbench page (provision, credentials, links, *Restart workshop*), admin seats page, broker API |
 | Gated | everything else (`/index.html`, `/modules/*`, `/_/*`, `/terminal`, `/wetty`, …) | the person's **own** Showroom (`showroom-<handle>.svc`), same paths, resolved per request via nginx `auth_request` → broker; `/workshop/agents-as-staff/` is the door and redirects to `/index.html` |
 
-Showroom is not subpath-aware (the guide, assets and the web terminal use absolute paths), so the hub owns only its own four surfaces and proxies the whole root per seat — the same shape as the handsonmode.ai hub. Everything is Red Hat platform components plus a small broker: no community proxies, no
+Showroom is not subpath-aware (the guide, assets and the web terminal use absolute paths), so the hub owns only `/`, `/hub/*` and `/api/*` and proxies the whole root per seat — the same shape as the handsonmode.ai hub. Everything is Red Hat platform components plus a small broker: no community proxies, no
 custom identity providers, nothing in cluster auth config is touched.
 
 ## Identity model
