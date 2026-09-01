@@ -48,7 +48,7 @@ custom identity providers, nothing in cluster auth config is touched.
 
 ## A seat, minted per person (`files/provision-seat.py`, Job `provision-<handle>`)
 
-handle = DNS-safe form of the username (`seatlib.sanitize`, collision-suffixed; recorded in
+**Keycloak group `attendees`** (the genesis template's `gitProvider: auto` publishes to Gitea only for `memberOf: attendees` entities — everyone else goes to `publish:github` into the platform GitHub org) → handle = DNS-safe form of the username (`seatlib.sanitize`, collision-suffixed; recorded in
 ConfigMap `factory-seats`) → `<handle>-agent-workspace` (RoleBindings for the user and the
 terminal SA, ResourceQuota, LimitRange, isolation NetworkPolicy, codex ExternalSecret,
 label `agentoffice.ai/managed=true` for operator discovery) → `showroom-<handle>` (from

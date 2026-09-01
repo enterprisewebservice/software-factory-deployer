@@ -88,18 +88,43 @@ try:
 
     step("email from keycloak")
     EMAIL = f"{HANDLE}@workshop.invalid"
+    KC_TOK, KC_UID = "", ""
     try:
         kc = secret_data("keycloak-admin", "claude-code-agent")
         form = urllib.parse.urlencode({"grant_type": "password", "client_id": "admin-cli",
                                        "username": kc["KEYCLOAK_ADMIN"], "password": kc["KEYCLOAK_ADMIN_PASSWORD"]}).encode()
         with urllib.request.urlopen(urllib.request.Request("https://auth.runtab.io/realms/master/protocol/openid-connect/token", data=form), timeout=20) as r:
-            tok = json.load(r)["access_token"]
-        code, users = http("GET", "https://auth.runtab.io/admin/realms/factory/users?exact=true&username=" + urllib.parse.quote(USER), headers={"Authorization": "Bearer " + tok})
-        if code == 200 and users and users[0].get("email"):
-            EMAIL = users[0]["email"]
+            KC_TOK = json.load(r)["access_token"]
+        code, users = http("GET", "https://auth.runtab.io/admin/realms/factory/users?exact=true&username=" + urllib.parse.quote(USER), headers={"Authorization": "Bearer " + KC_TOK})
+        if code == 200 and users:
+            KC_UID = users[0]["id"]
+            if users[0].get("email"):
+                EMAIL = users[0]["email"]
     except Exception as e:
-        print("keycloak email lookup skipped:", str(e)[:120])
+        print("keycloak lookup skipped:", str(e)[:120])
     print("email:", EMAIL)
+
+    step("keycloak attendees group (routes hires to Gitea)")
+    # The genesis template's gitProvider=auto publishes to Gitea ONLY for
+    # users whose catalog entity is memberOf `attendees` (RHDH ingests
+    # Keycloak groups); everyone else goes to publish:github into the
+    # platform's GitHub org. Every seat is an attendee.
+    if KC_TOK and KC_UID:
+        KCR = "https://auth.runtab.io/admin/realms/factory"
+        hdr = {"Authorization": "Bearer " + KC_TOK}
+        code, groups = http("GET", f"{KCR}/groups?search=attendees&exact=true", headers=hdr)
+        gid = groups[0]["id"] if code == 200 and groups else ""
+        if not gid:
+            http("POST", f"{KCR}/groups", {"name": "attendees"}, headers=hdr)
+            code, groups = http("GET", f"{KCR}/groups?search=attendees&exact=true", headers=hdr)
+            gid = groups[0]["id"] if code == 200 and groups else ""
+        if gid:
+            code, _ = http("PUT", f"{KCR}/users/{KC_UID}/groups/{gid}", headers=hdr)
+            print("attendees membership:", code)
+        else:
+            print("attendees group unavailable — hires would route to GitHub!")
+    else:
+        print("no keycloak account for this user (test seat) — skipped")
 
     step("seat password (mattermost + gitea local accounts)")
     try:
