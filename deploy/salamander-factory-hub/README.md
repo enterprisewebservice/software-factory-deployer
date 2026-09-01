@@ -25,9 +25,16 @@ custom identity providers, nothing in cluster auth config is touched.
   `workshop-viewer` ClusterRole (cluster-scoped reads the modules need), and nothing else.
   Its projected token is rotated by the kubelet, so the session never lapses. It cannot see
   other seats and is not in `system:authenticated:oauth` (no self-provisioning).
-* **Mattermost and Gitea local accounts** — one generated seat password (Secret
-  `seat-<handle>` in `factory-hub`, shown on the workbench page). Gitea is local-auth
-  only (no auth sources); nobody needs a pre-existing account — the seat creates it.
+* **Gitea and Mattermost — the same Keycloak login.** Gitea has an OpenID Connect auth
+  source `keycloak` (auto-registration + auto account-linking, see `deploy/salamander-gitea`);
+  the seat pre-creates the person's Gitea account linked to that source (`source_id`,
+  `login_name`) so their org exists before their first click. Mattermost Team Edition has no
+  OpenID Connect, so its GitLab integration points at Gitea's OAuth2 provider (app
+  `mattermost` in Gitea, Secret `mattermost-gitea-oauth`; env `MM_GITLABSETTINGS_*` on the
+  Deployment, button "Sign in with your workshop account"); the seat pre-creates the
+  Mattermost account as a `gitlab`-auth user keyed to the Gitea user id, so the first SSO
+  click lands on it. A generated seat password still exists (Secret `seat-<handle>`) only as
+  the fallback if SSO account creation fails; it is no longer shown.
 * **The seat agent's Gitea credential** — the operator renders `${GITEA_TOKEN}` into the
   gateway's Gitea MCP header from Secret `<handle>-gitea-token` in the workspace (the same
   contract user1..5 fill from Vault via the refresher, which only knows those five). Dynamic
