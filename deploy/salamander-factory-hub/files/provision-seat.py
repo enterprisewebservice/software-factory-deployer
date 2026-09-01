@@ -63,9 +63,14 @@ def secret_data(name, ns):
 
 try:
     step("tooling")
+    # Arbitrary-uid pod: /usr/local/bin is read-only. The cluster's own oc
+    # goes into a writable dir that we prepend to PATH for every subprocess.
+    os.makedirs("/tmp/bin", exist_ok=True)
+    os.environ["PATH"] = "/tmp/bin:" + os.environ.get("PATH", "")
     if subprocess.run(["which", "oc"], capture_output=True).returncode != 0:
         with urllib.request.urlopen("http://downloads.openshift-console.svc.cluster.local/amd64/linux/oc.tar", timeout=60) as r:
-            tarfile.open(fileobj=io.BytesIO(r.read())).extractall("/usr/local/bin")
+            tarfile.open(fileobj=io.BytesIO(r.read())).extractall("/tmp/bin")
+        os.chmod("/tmp/bin/oc", 0o755)
     print(S.oc("whoami").strip())
 
     step("seat record")
