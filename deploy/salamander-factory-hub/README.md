@@ -94,7 +94,10 @@ The genesis template's `gitProvider: auto` publishes to Gitea **only when the si
 catalog entity is `memberOf: attendees`** (a Keycloak group RHDH ingests); anyone else goes to
 `publish:github` into the platform's GitHub org with the platform token. So every seat is added
 to the Keycloak `attendees` group by the provisioner (and removed on Remove), the Keycloak org
-sync runs every minute, and the workbench page holds "Enter the workshop" until Developer Hub's
+sync runs every minute (RHDH app-config `catalog.providers.keycloakOrg.default.schedule.frequency`;
+the live ConfigMap `v1-developer-hub-app-config` is Helm-owned and was patched directly — that
+schedule is not declared in git anywhere, so carry it into the next `helm upgrade` values), and
+the workbench page holds "Enter the workshop" until Developer Hub's
 entity for the person shows `attendees` (`devhub_ready` from the broker). Signing in through the
 GitHub broker changes nothing here — the routing never looks at GitHub identity; nobody needs a
 GitHub account or any GitHub setup.
