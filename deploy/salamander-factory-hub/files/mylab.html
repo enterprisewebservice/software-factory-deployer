@@ -49,7 +49,7 @@
 </main>
 <script>
 const view = document.getElementById('view');
-const STEPS = ['seat record','openshift user + groups','workspace namespace + policy','operator discovery label','gitea user + org','gitea seat token (agent gateway)','argo applicationset generators','argo rbac rows','mattermost account','seat showroom','mark ready'];
+const STEPS = ['tooling','seat record','email from keycloak','keycloak attendees group (routes hires to Gitea)','seat password (mattermost + gitea local accounts)','openshift user + groups','workspace namespace + policy','operator discovery label','gitea user + org','gitea seat token (agent gateway)','argo applicationset generators','argo rbac rows','mattermost account','seat showroom','mark ready'];
 let timer = null;
 async function api(path, method='GET') { const r = await fetch(path, {method, credentials:'include', headers:{'Accept':'application/json'}}); return {ok:r.ok, status:r.status, data: await r.json().catch(()=>({}))}; }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -69,7 +69,7 @@ async function render() {
     const now = STEPS.indexOf(data.step||'');
     view.innerHTML = '<h2><span class="spin"></span>' + (data.phase === 'resetting' ? 'Resetting your workshop' : 'Setting up your workbench') + '</h2>'
       + '<div class="muted">Your own OpenShift project, agent workspace, git organization, chat account, and workshop instance. First time takes two to four minutes.</div>'
-      + (data.phase === 'provisioning' ? '<div style="margin-top:0.8rem">' + STEPS.map((s,i)=>'<div class="step '+(i<now?'done':i===now?'now':'')+'"><span class="dot"></span>'+esc(s)+'</div>').join('') + '</div>' : '');
+      + (data.phase === 'provisioning' ? '<div style="margin-top:0.8rem">' + STEPS.map((s,i)=>'<div class="step '+(i<now?'done':i===now?'now':'')+'"><span class="dot"></span>'+(i<now?'✓ ':'')+esc(s)+'</div>').join('') + '</div>' : '');
     timer = setTimeout(render, 5000); return;
   }
   if (data.phase === 'error') {

@@ -25,9 +25,19 @@ CUR = "start"
 
 
 def step(name):
+    """Print the step AND record it on the seat, so the workbench page's
+    checklist advances in real time instead of jumping from the first
+    step to done."""
     global CUR
     CUR = name
     print(f"== {name} ==", flush=True)
+    try:
+        if "HANDLE" in globals():
+            rec = dict(S.read_seats().get(HANDLE) or {})
+            rec.update({"username": USER, "handle": HANDLE, "phase": "provisioning", "step": name})
+            S.write_seat(HANDLE, rec)
+    except Exception as e:
+        print("  (step not recorded:", str(e)[:80], ")")
 
 
 def fail(msg):
