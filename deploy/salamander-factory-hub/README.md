@@ -26,7 +26,18 @@ custom identity providers, nothing in cluster auth config is touched.
   Its projected token is rotated by the kubelet, so the session never lapses. It cannot see
   other seats and is not in `system:authenticated:oauth` (no self-provisioning).
 * **Mattermost and Gitea local accounts** — one generated seat password (Secret
-  `seat-<handle>` in `factory-hub`, shown on the workbench page).
+  `seat-<handle>` in `factory-hub`, shown on the workbench page). Gitea is local-auth
+  only (no auth sources); nobody needs a pre-existing account — the seat creates it.
+* **The seat agent's Gitea credential** — the operator renders `${GITEA_TOKEN}` into the
+  gateway's Gitea MCP header from Secret `<handle>-gitea-token` in the workspace (the same
+  contract user1..5 fill from Vault via the refresher, which only knows those five). Dynamic
+  seats mint it with the Gitea admin acting as the user (`Sudo`): scopes
+  `write:repository, write:organization, write:issue, read:user`, id recorded on the seat
+  Secret, **revoked on Remove**. The person never types a Gitea password for it.
+* Keycloak realm `factory` enforces DNS-safe usernames at registration
+  (`^[a-z0-9][a-z0-9-]{2,19}$`) because every template and module derives names from
+  `{user}` (`<user>-agent-workspace`, `<user>-agents`); the Keycloak→Gitea broker button
+  is hidden on the login page (no seat depends on it; `storeToken` was never on).
 
 ## A seat, minted per person (`files/provision-seat.py`, Job `provision-<handle>`)
 
