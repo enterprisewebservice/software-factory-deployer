@@ -8,7 +8,7 @@ if ! command -v oc >/dev/null; then
 fi
 REC=$(oc get cm factory-seats -n factory-hub -o jsonpath="{.data.$H}")
 if bash /scripts/reset-seat.sh "$H" --confirm; then
-  NEW=$(printf '%s' "$REC" | python3 -c 'import json,sys,datetime; r=json.load(sys.stdin); r["phase"]="ready"; r["last_reset"]=datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"); print(json.dumps(r))')
+  NEW=$(printf '%s' "$REC" | python3 -c 'import json,sys,datetime; r=json.load(sys.stdin); r["phase"]="ready"; r["last_reset"]=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"); print(json.dumps(r))')
 else
   NEW=$(printf '%s' "$REC" | python3 -c 'import json,sys; r=json.load(sys.stdin); r["phase"]="error"; r["step"]="reset"; print(json.dumps(r))')
 fi

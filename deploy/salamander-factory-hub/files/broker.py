@@ -115,7 +115,8 @@ class H(BaseHTTPRequestHandler):
         if not rec:
             return {"user": u, "phase": "none", "admin": u in ADMINS}
         out = {"user": u, "handle": h, "phase": rec.get("phase"), "step": rec.get("step"), "detail": rec.get("detail"),
-               "started": rec.get("started"), "ready": rec.get("ready"), "admin": u in ADMINS, "links": S.links(h)}
+               "started": rec.get("started"), "ready": rec.get("ready"), "last_reset": rec.get("last_reset"),
+               "admin": u in ADMINS, "links": S.links(h)}
         if rec.get("phase") == "ready":
             out["seat_password"] = seat_password(h)
         return out
