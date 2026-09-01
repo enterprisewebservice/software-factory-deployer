@@ -71,3 +71,20 @@ oc rollout restart deployment/factory-hub -n factory-hub     # after page/broker
 Out of band (done 2026-09-01, never in git): Keycloak realm `factory` registration on
 (`verifyEmail=false`, no SMTP); Secret `factory-hub-proxy` (`cookie-secret`). Requires
 agent-office-operator ≥ v1.7.63 (label-driven cache scope).
+
+## Open signup: username collisions (hardening, 2026-09-01)
+
+`factory-sso` uses `mappingMethod: add`, which is what lets an htpasswd login and a Keycloak
+login share one OpenShift `User` (the seat model). With self-registration open, that also means
+**registering a Keycloak username equal to an existing privileged OpenShift user would attach
+the new identity to it** — `dpeterson` is cluster-admin via htpasswd and was not a Keycloak
+username. Every privileged OpenShift username is therefore *reserved* in Keycloak as a disabled
+placeholder (`dpeterson`, `admin-user1..5`; attribute `reserved`), so registration of those
+names fails with a conflict. **Standing rule:** any new OpenShift user with elevated rights that
+is not itself a Keycloak account must be reserved the same way while signup is open.
+
+Signing in through the GitHub broker is fine: Keycloak imports the GitHub handle as the
+username; if it fails the DNS-safe pattern (longer than 20 characters, etc.) the first-login
+Review Profile page asks for a valid one, and everything downstream sees an ordinary Keycloak
+user. Nothing in the workshop depends on GitHub itself.
+
