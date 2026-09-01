@@ -72,7 +72,7 @@
     <span class="logo"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory</span></span>
     <span class="spacer"></span>
     <span class="who" id="who"></span>
-    <a class="btn ghost" id="authBtn" href="/oauth/start?rd=%2F">Sign in</a>
+    <a class="btn ghost" id="authBtn" href="/hub/mylab.html">Sign in</a>
   </div>
 </nav>
 
@@ -151,7 +151,7 @@
 </div>
 
 <script>
-  // Workshop entry points, gated behind /workshop/* (oauth2-proxy).
+  // Workshop entry points, gated behind /workshop/* (OpenShift oauth-proxy).
   const ROUTES = { "agents-as-staff": "/workshop/agents-as-staff/" };
 
   // The landing is public (no session here); identity shows on /hub/mylab.html.
@@ -167,7 +167,7 @@
       // The card opens the login modal; the proxy enforces the real
       // gate at /workshop/* regardless of what the page does.
       const go = document.getElementById('signinGo');
-      go.href = '/oauth/start?rd=' + encodeURIComponent(dest);
+      go.href = dest; // protected path: the proxy signs in and returns here (never /oauth/start — see README)
       backdrop.classList.add('on');
     });
   });
