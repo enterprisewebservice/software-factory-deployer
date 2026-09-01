@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setting up your workbench — Red Hat Software Factory</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;900&family=Red+Hat+Text:wght@400;500&display=swap">
+<style>
+  :root { --rh-red:#ee0000; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Red Hat Text",system-ui,sans-serif; background:#151515; color:#fff; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1.5rem; }
+  .box { max-width:520px; text-align:center; }
+  .spinner { width:52px; height:52px; margin:0 auto 1.6rem; border:4px solid #333; border-top-color:var(--rh-red); border-radius:50%; animation:spin 0.9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.8rem; }
+  p { color:#c7c7c7; margin-top:0.9rem; line-height:1.6; }
+  .steps { text-align:left; margin:1.6rem auto 0; max-width:340px; color:#a0a0a0; font-size:0.9rem; }
+  .steps li { margin:0.3rem 0; }
+  .foot { margin-top:1.8rem; font-size:0.82rem; color:#777; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="spinner"></div>
+    <h1>Setting up your workbench</h1>
+    <p>We're provisioning your own environment on the cluster — an OpenShift project,
+       your agent workspace, git organization, and workshop instance. This takes a
+       couple of minutes the first time.</p>
+    <ul class="steps">
+      <li>Creating your project and access</li>
+      <li>Wiring your git organization and pipelines</li>
+      <li>Starting your workshop instance</li>
+    </ul>
+    <p class="foot">This page refreshes itself. If it's still here after five minutes,
+       return to the <a href="/" style="color:#ff6b6b">landing page</a> and try again,
+       or contact your Red Hat host.</p>
+  </div>
+  <script>setTimeout(() => location.reload(), 15000);</script>
+</body>
+</html>

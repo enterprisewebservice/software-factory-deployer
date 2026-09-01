@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red Hat Software Factory — hands-on workshops</title>
+<meta name="description" content="Hands-on workshops on a real Red Hat OpenShift cluster: governed AI agents, platform engineering, and the agentic software delivery lifecycle.">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400;700&display=swap">
+<style>
+  :root { --rh-red:#ee0000; --ink:#151515; --muted:#4d4d4d; --line:#e0e0e0; --bg:#f2f2f2; --panel:#fff; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Red Hat Text",system-ui,sans-serif; color:var(--ink); background:var(--bg); }
+  a { color:inherit; }
+  .nav { background:#000; color:#fff; }
+  .nav-in { max-width:1120px; margin:0 auto; padding:0.7rem 1.5rem; display:flex; align-items:center; gap:0.9rem; }
+  .logo { display:flex; align-items:baseline; gap:0.6rem; font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.15rem; letter-spacing:-0.01em; }
+  .logo .mark { width:0.85rem; height:1.35rem; background:var(--rh-red); border-radius:2px; transform:skewX(-8deg); display:inline-block; }
+  .logo .thin { font-weight:400; color:#c7c7c7; }
+  .nav .spacer { flex:1; }
+  .nav .who { font-size:0.85rem; color:#c7c7c7; }
+  .nav .who b { color:#fff; }
+  .btn { display:inline-block; border:0; border-radius:4px; background:var(--rh-red); color:#fff; padding:0.5rem 1.15rem; font:600 0.9rem "Red Hat Text",sans-serif; cursor:pointer; text-decoration:none; }
+  .btn:hover { background:#c00; }
+  .btn.ghost { background:transparent; border:1px solid #5a5a5a; color:#fff; }
+  .btn.ghost:hover { background:#1f1f1f; }
+  .hero { background:linear-gradient(100deg,#151515 0%,#2b2b2b 100%); color:#fff; }
+  .hero-in { max-width:1120px; margin:0 auto; padding:3.4rem 1.5rem 3rem; }
+  .hero .eyebrow { color:#ff6b6b; font-family:"Red Hat Mono",monospace; font-size:0.8rem; letter-spacing:0.14em; text-transform:uppercase; }
+  .hero h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:clamp(2rem,4.5vw,3.1rem); line-height:1.08; margin-top:0.6rem; max-width:20ch; }
+  .hero p { color:#d0d0d0; margin-top:1rem; max-width:52ch; font-size:1.08rem; line-height:1.55; }
+  .band { border-top:4px solid var(--rh-red); }
+  main { max-width:1120px; margin:0 auto; padding:2.4rem 1.5rem 3.5rem; }
+  .sec { font-family:"Red Hat Display",sans-serif; font-weight:700; font-size:1.35rem; }
+  .sec small { display:block; font-family:"Red Hat Text",sans-serif; font-weight:400; font-size:0.95rem; color:var(--muted); margin-top:0.2rem; }
+  .grid { margin-top:1.3rem; display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1.2rem; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; display:flex; flex-direction:column; text-align:left; cursor:pointer; font:inherit; color:inherit; transition:box-shadow .15s, transform .15s; }
+  .card:hover { box-shadow:0 12px 30px rgba(0,0,0,.12); transform:translateY(-3px); }
+  .card .top { height:6px; background:var(--rh-red); }
+  .card .body { padding:1.3rem 1.4rem 1.2rem; display:flex; flex-direction:column; gap:0.55rem; flex:1; }
+  .kind { font-family:"Red Hat Mono",monospace; font-size:0.72rem; font-weight:700; letter-spacing:0.1em; color:var(--rh-red); }
+  .card h3 { font-family:"Red Hat Display",sans-serif; font-size:1.25rem; font-weight:700; line-height:1.25; }
+  .card p { color:var(--muted); font-size:0.94rem; line-height:1.5; flex:1; }
+  .meta { display:flex; flex-wrap:wrap; gap:0.4rem; }
+  .pill { font-size:0.74rem; font-weight:600; padding:0.15rem 0.62rem; border-radius:999px; background:#f2f2f2; border:1px solid var(--line); }
+  .go { margin-top:0.4rem; color:var(--rh-red); font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:0.3rem; }
+  .card.soon { cursor:default; opacity:0.85; }
+  .card.soon .top { background:#b0b0b0; }
+  .card.soon .kind, .card.soon .go { color:var(--muted); }
+  .note { margin-top:1.6rem; font-size:0.85rem; color:var(--muted); background:#fff; border:1px solid var(--line); border-left:3px solid var(--rh-red); border-radius:4px; padding:0.7rem 1rem; }
+  footer { background:#000; color:#a0a0a0; padding:1.3rem 1.5rem; font-size:0.82rem; }
+  footer .in { max-width:1120px; margin:0 auto; display:flex; flex-wrap:wrap; gap:0.4rem 1.5rem; justify-content:space-between; }
+  /* modal */
+  .backdrop { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; padding:1.5rem; z-index:50; }
+  .backdrop.on { display:flex; }
+  .modal { background:#fff; border-radius:10px; max-width:440px; width:100%; padding:2rem 2rem 1.7rem; box-shadow:0 24px 60px rgba(0,0,0,.4); }
+  .modal .top { height:6px; background:var(--rh-red); border-radius:4px; margin:-2rem -2rem 1.4rem; }
+  .modal h2 { font-family:"Red Hat Display",sans-serif; font-size:1.4rem; font-weight:700; }
+  .modal p { color:var(--muted); font-size:0.95rem; line-height:1.55; margin-top:0.6rem; }
+  .modal .row { display:flex; gap:0.6rem; margin-top:1.4rem; flex-wrap:wrap; }
+  .modal .row .btn { flex:1; text-align:center; }
+  .modal .btn.dark { background:#151515; }
+  .modal .btn.dark:hover { background:#000; }
+  .modal .x { float:right; border:0; background:none; font-size:1.4rem; line-height:1; color:#888; cursor:pointer; margin:-0.3rem -0.3rem 0 0; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-in">
+    <span class="logo"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory</span></span>
+    <span class="spacer"></span>
+    <span class="who" id="who"></span>
+    <a class="btn ghost" id="authBtn" href="/oauth2/start?rd=%2F">Sign in</a>
+  </div>
+</nav>
+
+<section class="hero band">
+  <div class="hero-in">
+    <div class="eyebrow">Hands-on · real cluster · nothing simulated</div>
+    <h1>Build governed AI agents on the platform you already run.</h1>
+    <p>Every workshop here runs on a live Red Hat OpenShift cluster — you hire agents,
+       ship through pipelines, and govern the whole software delivery lifecycle with the
+       same GitOps, supply-chain, and identity discipline as production. Browse freely;
+       sign in with your email when you're ready to claim a workbench.</p>
+  </div>
+</section>
+
+<main>
+  <div class="sec">Workshops
+    <small>Guided, multi-module labs on a provisioned environment that's yours for the session.</small>
+  </div>
+  <div class="grid">
+    <button class="card" data-workshop="agents-as-staff">
+      <span class="top"></span>
+      <span class="body">
+        <span class="kind">WORKSHOP · 8 MODULES</span>
+        <h3>AI Agents as Staff — the OpenShift Software Factory</h3>
+        <p>Hire a governed AI agent from a golden-path template, watch OpenShift GitOps
+           onboard it, govern its tools through an MCP gateway, teach it versioned skills,
+           run it headless in a Tekton pipeline, and swap its model — all declared in git.</p>
+        <span class="meta">
+          <span class="pill">~4 hours</span><span class="pill">OpenShift + Dev Hub</span>
+          <span class="pill">your own workbench</span>
+        </span>
+        <span class="go">Start the workshop →</span>
+      </span>
+    </button>
+
+    <div class="card soon">
+      <span class="top"></span>
+      <span class="body">
+        <span class="kind">MORE COMING</span>
+        <h3>More workshops &amp; tutorials</h3>
+        <p>New hands-on tracks land here as they're built. The library is young —
+           check back, or ask your Red Hat contact what's next.</p>
+        <span class="go">Soon</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="note">
+    Browsing needs no account. Starting a workshop signs you in with your email and provisions
+    a workbench that's yours — your own project, agents, and git repositories on the cluster.
+  </div>
+</main>
+
+<footer>
+  <div class="in">
+    <span>Red Hat OpenShift Software Factory — hands-on enablement. Runs on a live cluster.</span>
+    <span>© 2026 Red Hat, Inc.</span>
+  </div>
+</footer>
+
+<div class="backdrop" id="backdrop">
+  <div class="modal">
+    <div class="top"></div>
+    <button class="x" id="modalX" aria-label="Close">&times;</button>
+    <h2>Sign in to start</h2>
+    <p>This workshop provisions a live workbench on the cluster — your own OpenShift project,
+       agents, and git repositories. Sign in with your email (or create an account) and we'll
+       set it up. It takes a minute or two the first time.</p>
+    <div class="row">
+      <a class="btn" id="signinGo" href="#">Sign in / sign up with email</a>
+    </div>
+    <div class="row">
+      <button class="btn dark" id="cancelBtn" style="flex:1">Keep browsing</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Workshop entry points, gated behind /workshop/* (oauth2-proxy).
+  const ROUTES = { "agents-as-staff": "/workshop/agents-as-staff/" };
+
+  // Reflect session state from the userinfo endpoint the proxy exposes.
+  fetch('/oauth2/userinfo', { credentials: 'include' })
+    .then(r => r.ok ? r.json() : null)
+    .then(u => {
+      if (u && (u.email || u.preferredUsername || u.user)) {
+        const who = document.getElementById('who');
+        who.innerHTML = 'Signed in as <b>' + (u.email || u.preferredUsername || u.user) + '</b>';
+        const b = document.getElementById('authBtn');
+        b.textContent = 'Sign out';
+        b.href = '/oauth2/sign_out?rd=%2F';
+      }
+    })
+    .catch(() => {});
+
+  const backdrop = document.getElementById('backdrop');
+  const close = () => backdrop.classList.remove('on');
+  document.getElementById('modalX').onclick = close;
+  document.getElementById('cancelBtn').onclick = close;
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  document.querySelectorAll('.card[data-workshop]').forEach(card => {
+    const dest = ROUTES[card.dataset.workshop];
+    card.addEventListener('click', () => {
+      // The card opens the login modal; the proxy enforces the real
+      // gate at /workshop/* regardless of what the page does.
+      const go = document.getElementById('signinGo');
+      go.href = '/oauth2/start?rd=' + encodeURIComponent(dest);
+      backdrop.classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>

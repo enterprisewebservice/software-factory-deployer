@@ -1,0 +1,160 @@
+# =============================================================================
+# Red Hat Software Factory hub — factory.apps.salamander.aimlworkbench.com
+#
+# The share-out front door for the agents-as-staff workshop. Three tiers:
+#
+#   PUBLIC   /  /assets/*      the landing page — browse with no account
+#   AUTH     /oauth2/*         oauth2-proxy <-> Keycloak realm `factory`
+#   GATED    /workshop/*       requires a signed-in session; per person
+#
+# oauth2-proxy is the only ingress. It skip-auths the landing and its
+# assets, runs the OIDC dance for everything else, and forwards the
+# signed-in identity (X-Auth-Request-User / -Email) to the nginx
+# backend. nginx serves the landing and reverse-proxies the workshop.
+#
+# PER-SEAT ROUTING (provisioner milestone): the gated location resolves
+# the target showroom from the authenticated username —
+# showroom-<user>.svc — so once a person's seat exists their own
+# environment answers, and until then the holding page does. Today,
+# before the provisioner lands, WORKSHOP_UPSTREAM points at the shared
+# Red Hat showroom so the gate itself is provable end to end.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: factory-hub-nginx
+  namespace: factory-hub
+data:
+  nginx.conf: |
+    error_log /dev/stderr;
+    pid /tmp/nginx.pid;
+    events { worker_connections 1024; }
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      access_log /dev/stdout;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      # Cluster DNS, for resolving per-seat showroom services at request time.
+      resolver 172.30.0.10 valid=10s;
+      map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+      server {
+        listen 8080 default_server;
+        absolute_redirect off;
+        root /opt/app-root/src;
+
+        # -- public landing -------------------------------------------
+        location = / { try_files /site/landing.html =404; }
+        location /assets/ { alias /opt/app-root/src/assets/; }
+
+        # -- gated workshop -------------------------------------------
+        # oauth2-proxy has already enforced auth by the time a request
+        # reaches here, and set X-Auth-Request-User. Resolve the seat's
+        # own showroom; a missing seat (502/504) shows the holding page.
+        location ~ ^/workshop/agents-as-staff(/.*)?$ {
+          set $seat $http_x_auth_request_user;
+          set $rest $1;
+          if ($rest = '') { set $rest /; }
+          # Shared target until the provisioner mints per-seat showrooms;
+          # swap for: http://showroom-$seat.showroom-$seat.svc.cluster.local:8080$rest
+          proxy_pass http://showroom-factory.showroom-factory.svc.cluster.local:8080$rest;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection $connection_upgrade;
+          proxy_read_timeout 1h;
+          proxy_send_timeout 1h;
+          proxy_buffering off;
+          error_page 502 503 504 = @provisioning;
+        }
+        location @provisioning { try_files /site/provisioning.html =404; }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: factory-hub
+  namespace: factory-hub
+  labels: { app: factory-hub }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: factory-hub } }
+  template:
+    metadata:
+      labels: { app: factory-hub }
+    spec:
+      containers:
+        # --- the auth gate ---------------------------------------------
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url=https://auth.runtab.io/realms/factory
+            - --client-id=factory-hub
+            - --redirect-url=https://factory.apps.salamander.aimlworkbench.com/oauth2/callback
+            - --oidc-email-claim=email
+            - --insecure-oidc-allow-unverified-email=true
+            - --scope=openid email profile
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --upstream=http://127.0.0.1:8080
+            - --skip-provider-button=true
+            # Browse with no account: the landing and its assets are open.
+            - --skip-auth-route=^/$
+            - --skip-auth-route=^/assets/
+            - --skip-auth-route=^/favicon
+            # Expose identity to the backend and to the landing JS.
+            - --set-xauthrequest=true
+            - --pass-user-headers=true
+            - --email-domain=*
+            - --cookie-secure=true
+            - --cookie-refresh=1h
+            - --cookie-expire=8h
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: factory-hub-oidc, key: client-secret } }
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom: { secretKeyRef: { name: factory-hub-oidc, key: cookie-secret } }
+          ports: [{ containerPort: 4180 }]
+          readinessProbe: { httpGet: { path: /ping, port: 4180 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          resources: { requests: { cpu: 10m, memory: 48Mi }, limits: { cpu: 500m, memory: 256Mi } }
+        # --- landing + workshop proxy ----------------------------------
+        - name: nginx
+          image: registry.access.redhat.com/ubi9/nginx-124:latest
+          command: ["nginx", "-c", "/etc/nginx-custom/nginx.conf", "-g", "daemon off;"]
+          ports: [{ containerPort: 8080 }]
+          volumeMounts:
+            - { name: nginx-conf, mountPath: /etc/nginx-custom, readOnly: true }
+            - { name: site, mountPath: /opt/app-root/src/site, readOnly: true }
+            - { name: assets, mountPath: /opt/app-root/src/assets, readOnly: true }
+          resources: { requests: { cpu: 10m, memory: 32Mi }, limits: { cpu: 200m, memory: 128Mi } }
+      volumes:
+        - { name: nginx-conf, configMap: { name: factory-hub-nginx } }
+        - { name: site, configMap: { name: factory-hub-site } }
+        - { name: assets, configMap: { name: factory-hub-assets } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: factory-hub
+  namespace: factory-hub
+  labels: { app: factory-hub }
+spec:
+  selector: { app: factory-hub }
+  ports: [{ name: http, port: 8080, targetPort: 4180 }]
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: factory-hub
+  namespace: factory-hub
+  annotations:
+    haproxy.router.openshift.io/timeout: 1h
+spec:
+  host: factory.apps.salamander.aimlworkbench.com
+  to: { kind: Service, name: factory-hub }
+  port: { targetPort: http }
+  tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
