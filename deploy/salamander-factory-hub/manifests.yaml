@@ -64,17 +64,21 @@ data:
           proxy_set_header X-Forwarded-User $http_x_forwarded_user;
         }
 
-        # -- gated workshop: the person's OWN showroom -----------------
+        # -- the person's OWN showroom: every path the hub does not own -----
+        # Showroom is not subpath-aware: the guide, its assets, and the
+        # web terminal all use absolute paths (/modules, /_/, /wetty...).
+        # So the whole root proxies to the signed-in person's showroom,
+        # same paths, and /workshop/agents-as-staff/ is just the door.
         # oauth-proxy enforced auth and set X-Forwarded-User; the broker
         # maps that user to showroom-<handle>.svc (401 = no seat yet ->
         # the workbench page, which provisions and polls).
-        location ~ ^/workshop/agents-as-staff(/.*)?$ {
-          set $rest $1;
-          if ($rest = '') { set $rest /; }
+        location = /workshop/agents-as-staff  { return 302 /index.html; }
+        location = /workshop/agents-as-staff/ { return 302 /index.html; }
+        location / {
           auth_request /_resolve;
           auth_request_set $seat_upstream $upstream_http_x_seat_upstream;
           error_page 401 403 = @noseat;
-          proxy_pass http://$seat_upstream$rest;
+          proxy_pass http://$seat_upstream;
           proxy_http_version 1.1;
           proxy_set_header Host $host;
           proxy_set_header X-Forwarded-Proto https;
