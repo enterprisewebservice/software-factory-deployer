@@ -93,7 +93,9 @@ req = urllib.request.Request(f"{MM}/users/username/{H}", headers=hdr)
 try:
     with urllib.request.urlopen(req, timeout=20) as r:
         mid = json.load(r)["id"]
-    print("  deactivate:", http("DELETE", f"{MM}/users/{mid}", headers=hdr))
+    # permanent when the server allows it (EnableAPIUserDeletion), else deactivate
+    code = http("DELETE", f"{MM}/users/{mid}?permanent=true", headers=hdr)
+    print("  permanent delete:", code, "" if code == 200 else "-> deactivate: %s" % http("DELETE", f"{MM}/users/{mid}", headers=hdr))
 except Exception as e:
     print("  none:", str(e)[:80])
 
@@ -122,8 +124,8 @@ print("== cluster objects ==", flush=True)
 S.oc("delete", "clusterrolebinding", f"seat-{H}-workshop-viewer", "--ignore-not-found")
 S.oc("delete", "ns", SNS, NS, "--ignore-not-found", "--wait=false")
 if USER:
-    S.oc("adm", "groups", "remove-users", "redhat-workshop-users", USER, check=False)
-    S.oc("delete", "group", USER, "--ignore-not-found", check=False)
+    print("  workshop group:", S.oc("adm", "groups", "remove-users", "redhat-workshop-users", USER, check=False).strip() or "removed")
+    print("  per-user group:", S.oc("delete", "group", USER, "--ignore-not-found", check=False).strip() or "(no output)")
 S.oc("delete", "secret", f"seat-{H}", "-n", S.HUB_NS, "--ignore-not-found")
 S.oc("patch", "cm", S.SEATS_CM, "-n", S.HUB_NS, "--type=json", "-p", json.dumps([{"op": "remove", "path": f"/data/{H}"}]), check=False)
 print(f"SEAT REMOVED: {H}", flush=True)

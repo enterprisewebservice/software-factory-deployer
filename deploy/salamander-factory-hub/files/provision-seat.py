@@ -259,7 +259,17 @@ try:
     # GitLab integration points at Gitea's OAuth2 provider). auth_data is
     # the Gitea user id, so the first "Sign in with your workshop account"
     # lands on this pre-created account instead of minting a duplicate.
-    if http("GET", f"{MM}/users/username/{HANDLE}", headers=hdr)[0] != 200:
+    mm_code, mm_user = http("GET", f"{MM}/users/username/{HANDLE}", headers=hdr)
+    if mm_code == 200 and mm_user:
+        # A previous seat with this username left a (deactivated) account
+        # keyed to a Gitea id that no longer exists: reactivate and re-key
+        # it to the fresh Gitea account so the SSO link resolves.
+        mid = mm_user["id"]
+        if mm_user.get("delete_at"):
+            print("  reactivating:", http("PUT", f"{MM}/users/{mid}/active", {"active": True}, headers=hdr)[0])
+        if str(mm_user.get("auth_data") or "") != GITEA_UID or mm_user.get("auth_service") != "gitlab":
+            print("  re-keying auth:", http("PUT", f"{MM}/users/{mid}/auth", {"auth_data": GITEA_UID, "auth_service": "gitlab"}, headers=hdr)[0])
+    else:
         body = {"email": EMAIL, "username": HANDLE, "auth_service": "gitlab", "auth_data": GITEA_UID}
         code, _ = http("POST", f"{MM}/users", body, headers=hdr)
         if code not in (201,):
