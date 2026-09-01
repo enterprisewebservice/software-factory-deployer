@@ -3,7 +3,7 @@
 #
 # The share-out front door for the agents-as-staff workshop. Three tiers:
 #
-#   PUBLIC   /  /assets/*      the landing page — browse with no account
+#   PUBLIC   /  /hub/assets/*  the landing page — browse with no account
 #   AUTH     /oauth/*          OpenShift oauth-proxy -> cluster OAuth -> Keycloak (factory-sso)
 #   GATED    /workshop/*       requires a signed-in session; per person
 #
@@ -46,7 +46,9 @@ data:
 
         # -- public landing -------------------------------------------
         location = / { try_files /site/landing.html =404; }
-        location /assets/ { alias /opt/app-root/src/assets/; }
+        # Hub assets live under /hub/assets: Showroom's own shell loads
+        # ./assets/index-*.js, so /assets/ must proxy to the seat, not us.
+        location /hub/assets/ { alias /opt/app-root/src/assets/; }
 
         # -- signed-in hub pages + broker API --------------------------
         location /hub/ { alias /opt/app-root/src/site/; }
@@ -130,7 +132,7 @@ spec:
             - --pass-basic-auth=false
             # Browse with no account: the landing and its assets are open.
             - --skip-auth-regex=^/$
-            - --skip-auth-regex=^/assets/
+            - --skip-auth-regex=^/hub/assets/
             - --skip-provider-button=true
           ports: [{ containerPort: 4180 }]
           volumeMounts:
