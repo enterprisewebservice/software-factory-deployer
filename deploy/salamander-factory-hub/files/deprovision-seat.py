@@ -97,6 +97,27 @@ try:
 except Exception as e:
     print("  none:", str(e)[:80])
 
+print("== keycloak attendees membership ==", flush=True)
+try:
+    kc = secret_data("keycloak-admin", "claude-code-agent")
+    import urllib.parse
+    form = urllib.parse.urlencode({"grant_type": "password", "client_id": "admin-cli",
+                                   "username": kc["KEYCLOAK_ADMIN"], "password": kc["KEYCLOAK_ADMIN_PASSWORD"]}).encode()
+    with urllib.request.urlopen(urllib.request.Request("https://auth.runtab.io/realms/master/protocol/openid-connect/token", data=form), timeout=20) as r:
+        ktok = json.load(r)["access_token"]
+    KCR = "https://auth.runtab.io/admin/realms/factory"
+    khdr = {"Authorization": "Bearer " + ktok}
+    req = urllib.request.Request(f"{KCR}/users?exact=true&username=" + urllib.parse.quote(USER), headers=khdr)
+    users = json.load(urllib.request.urlopen(req, timeout=20))
+    req = urllib.request.Request(f"{KCR}/groups?search=attendees&exact=true", headers=khdr)
+    groups = json.load(urllib.request.urlopen(req, timeout=20))
+    if users and groups:
+        print("  removed from attendees:", http("DELETE", f"{KCR}/users/{users[0]['id']}/groups/{groups[0]['id']}", headers=khdr))
+    else:
+        print("  no keycloak account / group")
+except Exception as e:
+    print("  keycloak step skipped:", str(e)[:80])
+
 print("== cluster objects ==", flush=True)
 S.oc("delete", "clusterrolebinding", f"seat-{H}-workshop-viewer", "--ignore-not-found")
 S.oc("delete", "ns", SNS, NS, "--ignore-not-found", "--wait=false")
