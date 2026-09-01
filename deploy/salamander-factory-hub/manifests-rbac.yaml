@@ -70,7 +70,7 @@ rules:
     verbs: [bind]
   - apiGroups: [user.openshift.io]
     resources: [users, groups, identities]
-    verbs: [get, list, create, patch, update]
+    verbs: [get, list, create, patch, update, delete]
   - apiGroups: [external-secrets.io]
     resources: [externalsecrets]
     verbs: [get, list, create, patch, update, delete]
