@@ -79,8 +79,10 @@ try:
     seats = S.read_seats()
     HANDLE = S.allocate_handle(USER, seats)
     NS, SNS, ORG = f"{HANDLE}-agent-workspace", f"showroom-{HANDLE}", f"{HANDLE}-agents"
-    rec = {"username": USER, "handle": HANDLE, "phase": "provisioning", "started": S.oc("date", check=False) or ""}
-    rec["started"] = subprocess.check_output(["date", "-u", "+%FT%TZ"], text=True).strip()
+    # Repairs keep history (first provision time, last reset).
+    rec = dict(seats.get(HANDLE) or {})
+    rec.update({"username": USER, "handle": HANDLE, "phase": "provisioning", "step": None, "detail": None})
+    rec.setdefault("started", subprocess.check_output(["date", "-u", "+%FT%TZ"], text=True).strip())
     S.write_seat(HANDLE, rec)
     print(f"user={USER} handle={HANDLE}")
 
@@ -192,8 +194,9 @@ try:
     subprocess.run(["oc", "rollout", "status", f"deployment/showroom-{HANDLE}", "-n", SNS, "--timeout=480s"], check=True)
 
     step("mark ready")
-    rec.update({"phase": "ready", "email": EMAIL,
-                "ready": subprocess.check_output(["date", "-u", "+%FT%TZ"], text=True).strip()})
+    rec.update({"phase": "ready", "email": EMAIL})
+    rec.setdefault("ready", subprocess.check_output(["date", "-u", "+%FT%TZ"], text=True).strip())
+    rec["last_provisioned"] = subprocess.check_output(["date", "-u", "+%FT%TZ"], text=True).strip()
     S.write_seat(HANDLE, rec)
     print(f"SEAT READY: {USER} -> {HANDLE}", flush=True)
 except SystemExit:
