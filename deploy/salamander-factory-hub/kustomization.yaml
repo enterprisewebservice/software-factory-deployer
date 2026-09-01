@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: factory-hub
 resources:
   - manifests.yaml
+  - manifests-rbac.yaml
 # Page content ships as ConfigMaps generated from the real files; after
 # editing, `oc apply -k deploy/salamander-factory-hub` then
 # `oc rollout restart deployment/factory-hub -n factory-hub`.
@@ -11,6 +12,20 @@ configMapGenerator:
     files:
       - landing.html=files/landing.html
       - provisioning.html=files/provisioning.html
+      - mylab.html=files/mylab.html
+      - admin.html=files/admin.html
+  - name: factory-hub-broker
+    files:
+      - broker.py=files/broker.py
+      - seatlib.py=files/seatlib.py
+  - name: factory-hub-scripts
+    files:
+      - provision-seat.py=files/provision-seat.py
+      - seatlib.py=files/seatlib.py
+      - reset-seat.sh=files/reset-seat.sh
+      - reset-entry.sh=files/reset-entry.sh
+      - seat-showroom.yaml=files/seat-showroom.yaml
+      - seat-policy.yaml=files/seat-policy.yaml
   - name: factory-hub-assets
     files:
       - favicon.svg=files/favicon.svg

@@ -1,0 +1,108 @@
+# Service accounts and roles for the hub broker and the seat provisioner.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: factory-hub-broker
+  namespace: factory-hub
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [factory-seats]
+    verbs: [get, patch]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: factory-hub-broker
+  namespace: factory-hub
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: factory-hub-broker }
+subjects: [{ kind: ServiceAccount, name: factory-hub, namespace: factory-hub }]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: factory-provisioner
+  namespace: factory-hub
+---
+# What the workshop terminal (and the person) may read cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: workshop-viewer
+rules:
+  - apiGroups: [agentoffice.ai]
+    resources: [modelconnections]
+    verbs: [get, list, watch]
+---
+# The provisioner: explicit, resource-by-resource. Everything a seat is.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: factory-provisioner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [""]
+    resources: [configmaps, secrets, serviceaccounts, services, persistentvolumeclaims, resourcequotas, limitranges]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings, clusterrolebindings]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    resourceNames: [admin, edit, workshop-viewer]
+    verbs: [bind]
+  - apiGroups: [user.openshift.io]
+    resources: [users, groups, identities]
+    verbs: [get, list, create, patch, update]
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets]
+    verbs: [get, list, create, patch, update, delete]
+  - apiGroups: [operators.coreos.com]
+    resources: [subscriptions]
+    verbs: [get, patch]
+  - apiGroups: [argoproj.io]
+    resources: [applicationsets, argocds]
+    verbs: [get, patch]
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list, delete]
+  - apiGroups: [agentoffice.ai]
+    resources: [agentworkstations, agentgateways, skills]
+    verbs: [get, list, delete]
+  - apiGroups: [mcp.kuadrant.io, gateway.networking.k8s.io, pipelinesascode.tekton.dev, tekton.dev]
+    resources: [mcpserverregistrations, httproutes, repositories, pipelineruns]
+    verbs: [get, list, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: factory-provisioner
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: factory-provisioner }
+subjects: [{ kind: ServiceAccount, name: factory-provisioner, namespace: factory-hub }]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: factory-seats
+  namespace: factory-hub
+data: {}

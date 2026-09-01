@@ -4,10 +4,10 @@
 # The share-out front door for the agents-as-staff workshop. Three tiers:
 #
 #   PUBLIC   /  /assets/*      the landing page — browse with no account
-#   AUTH     /oauth2/*         oauth2-proxy <-> Keycloak realm `factory`
+#   AUTH     /oauth/*          OpenShift oauth-proxy -> cluster OAuth -> Keycloak (factory-sso)
 #   GATED    /workshop/*       requires a signed-in session; per person
 #
-# oauth2-proxy is the only ingress. It skip-auths the landing and its
+# oauth-proxy is the only ingress. It skip-auths the landing and its
 # assets, runs the OIDC dance for everything else, and forwards the
 # signed-in identity (X-Auth-Request-User / -Email) to the nginx
 # backend. nginx serves the landing and reverse-proxies the workshop.
@@ -48,17 +48,33 @@ data:
         location = / { try_files /site/landing.html =404; }
         location /assets/ { alias /opt/app-root/src/assets/; }
 
-        # -- gated workshop -------------------------------------------
-        # oauth2-proxy has already enforced auth by the time a request
-        # reaches here, and set X-Auth-Request-User. Resolve the seat's
-        # own showroom; a missing seat (502/504) shows the holding page.
+        # -- signed-in hub pages + broker API --------------------------
+        location /hub/ { alias /opt/app-root/src/site/; }
+        location /api/ {
+          proxy_pass http://127.0.0.1:9000;
+          proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+          proxy_read_timeout 60s;
+        }
+        # nginx subrequest: which showroom answers for this session?
+        location = /_resolve {
+          internal;
+          proxy_pass http://127.0.0.1:9000/api/resolve;
+          proxy_pass_request_body off;
+          proxy_set_header Content-Length "";
+          proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+        }
+
+        # -- gated workshop: the person's OWN showroom -----------------
+        # oauth-proxy enforced auth and set X-Forwarded-User; the broker
+        # maps that user to showroom-<handle>.svc (401 = no seat yet ->
+        # the workbench page, which provisions and polls).
         location ~ ^/workshop/agents-as-staff(/.*)?$ {
-          set $seat $http_x_auth_request_user;
           set $rest $1;
           if ($rest = '') { set $rest /; }
-          # Shared target until the provisioner mints per-seat showrooms;
-          # swap for: http://showroom-$seat.showroom-$seat.svc.cluster.local:8080$rest
-          proxy_pass http://showroom-factory.showroom-factory.svc.cluster.local:8080$rest;
+          auth_request /_resolve;
+          auth_request_set $seat_upstream $upstream_http_x_seat_upstream;
+          error_page 401 403 = @noseat;
+          proxy_pass http://$seat_upstream$rest;
           proxy_http_version 1.1;
           proxy_set_header Host $host;
           proxy_set_header X-Forwarded-Proto https;
@@ -69,6 +85,7 @@ data:
           proxy_buffering off;
           error_page 502 503 504 = @provisioning;
         }
+        location @noseat { return 302 /hub/mylab.html; }
         location @provisioning { try_files /site/provisioning.html =404; }
       }
     }
@@ -87,39 +104,34 @@ spec:
       labels: { app: factory-hub }
     spec:
       containers:
-        # --- the auth gate ---------------------------------------------
-        - name: oauth2-proxy
-          image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+        # --- the auth gate: OpenShift oauth-proxy (release payload image) --
+        # Delegates to the cluster OAuth server, which federates to Keycloak
+        # (factory-sso, OIDC, mappingMethod add). The idp hint skips the
+        # provider chooser, so an anonymous click lands on Keycloak's own
+        # sign-in/register page. The signed-in OpenShift username reaches
+        # nginx/broker as X-Forwarded-User.
+        - name: oauth-proxy
+          image: quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:b8e3cc632ec7ee136b1b9296acf51b796c7eefb007f2613ade15ae50ec94d04e
           args:
-            - --provider=oidc
-            - --oidc-issuer-url=https://auth.runtab.io/realms/factory
-            - --client-id=factory-hub
-            - --redirect-url=https://factory.apps.salamander.aimlworkbench.com/oauth2/callback
-            - --oidc-email-claim=email
-            - --insecure-oidc-allow-unverified-email=true
-            - --scope=openid email profile
+            - --https-address=
             - --http-address=0.0.0.0:4180
-            - --reverse-proxy=true
+            - --provider=openshift
+            - --openshift-service-account=factory-hub
+            - --login-url=https://oauth-openshift.apps.salamander.aimlworkbench.com/oauth/authorize?idp=factory-sso
             - --upstream=http://127.0.0.1:8080
-            - --skip-provider-button=true
-            # Browse with no account: the landing and its assets are open.
-            - --skip-auth-route=^/$
-            - --skip-auth-route=^/assets/
-            - --skip-auth-route=^/favicon
-            # Expose identity to the backend and to the landing JS.
-            - --set-xauthrequest=true
+            - --cookie-secret-file=/etc/proxy/secrets/cookie-secret
+            - --cookie-expire=8h0m0s
+            - --cookie-refresh=1h0m0s
             - --pass-user-headers=true
-            - --email-domain=*
-            - --cookie-secure=true
-            - --cookie-refresh=1h
-            - --cookie-expire=8h
-          env:
-            - name: OAUTH2_PROXY_CLIENT_SECRET
-              valueFrom: { secretKeyRef: { name: factory-hub-oidc, key: client-secret } }
-            - name: OAUTH2_PROXY_COOKIE_SECRET
-              valueFrom: { secretKeyRef: { name: factory-hub-oidc, key: cookie-secret } }
+            - --pass-basic-auth=false
+            # Browse with no account: the landing and its assets are open.
+            - --skip-auth-regex=^/$
+            - --skip-auth-regex=^/assets/
+            - --skip-provider-button=true
           ports: [{ containerPort: 4180 }]
-          readinessProbe: { httpGet: { path: /ping, port: 4180 }, initialDelaySeconds: 5, periodSeconds: 10 }
+          volumeMounts:
+            - { name: proxy-secrets, mountPath: /etc/proxy/secrets, readOnly: true }
+          readinessProbe: { httpGet: { path: /oauth/healthz, port: 4180 }, initialDelaySeconds: 5, periodSeconds: 10 }
           resources: { requests: { cpu: 10m, memory: 48Mi }, limits: { cpu: 500m, memory: 256Mi } }
         # --- landing + workshop proxy ----------------------------------
         - name: nginx
@@ -131,10 +143,31 @@ spec:
             - { name: site, mountPath: /opt/app-root/src/site, readOnly: true }
             - { name: assets, mountPath: /opt/app-root/src/assets, readOnly: true }
           resources: { requests: { cpu: 10m, memory: 32Mi }, limits: { cpu: 200m, memory: 128Mi } }
+        # --- seat broker (lookup / provision / reset / admin) ------------
+        - name: broker
+          image: registry.access.redhat.com/ubi9/python-312:latest
+          command: ["python3", "/app/broker.py"]
+          env:
+            - { name: ADMIN_USERS, value: "dpeterson" }
+            - { name: MAX_SEATS, value: "25" }
+          volumeMounts:
+            - { name: broker, mountPath: /app, readOnly: true }
+          resources: { requests: { cpu: 10m, memory: 48Mi }, limits: { cpu: 300m, memory: 192Mi } }
+      serviceAccountName: factory-hub
       volumes:
+        - { name: proxy-secrets, secret: { secretName: factory-hub-proxy } }
+        - { name: broker, configMap: { name: factory-hub-broker } }
         - { name: nginx-conf, configMap: { name: factory-hub-nginx } }
         - { name: site, configMap: { name: factory-hub-site } }
         - { name: assets, configMap: { name: factory-hub-assets } }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: factory-hub
+  namespace: factory-hub
+  annotations:
+    serviceaccounts.openshift.io/oauth-redirectreference.hub: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"factory-hub"}}'
 ---
 apiVersion: v1
 kind: Service

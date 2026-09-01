@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your workbench — Red Hat Software Factory</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400;700&display=swap">
+<style>
+  :root { --rh-red:#ee0000; --ink:#151515; --muted:#4d4d4d; --line:#e0e0e0; --bg:#f2f2f2; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Red Hat Text",system-ui,sans-serif; color:var(--ink); background:var(--bg); }
+  .nav { background:#000; color:#fff; } .nav-in { max-width:960px; margin:0 auto; padding:0.7rem 1.5rem; display:flex; align-items:center; gap:0.9rem; }
+  .logo { display:flex; align-items:baseline; gap:0.6rem; font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.15rem; text-decoration:none; color:#fff; }
+  .logo .mark { width:0.85rem; height:1.35rem; background:var(--rh-red); border-radius:2px; transform:skewX(-8deg); display:inline-block; }
+  .logo .thin { font-weight:400; color:#c7c7c7; } .spacer { flex:1; } .who { font-size:0.85rem; color:#c7c7c7; } .who b { color:#fff; }
+  .btn { display:inline-block; border:0; border-radius:4px; background:var(--rh-red); color:#fff; padding:0.55rem 1.2rem; font:600 0.9rem "Red Hat Text",sans-serif; cursor:pointer; text-decoration:none; }
+  .btn:hover { background:#c00; } .btn.ghost { background:transparent; border:1px solid #5a5a5a; color:#fff; } .btn.dark { background:#151515; } .btn.outline { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .btn[disabled] { opacity:0.5; cursor:default; }
+  main { max-width:960px; margin:0 auto; padding:2rem 1.5rem 3rem; }
+  h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.8rem; }
+  .sub { color:var(--muted); margin-top:0.3rem; }
+  .panel { background:#fff; border:1px solid var(--line); border-top:5px solid var(--rh-red); border-radius:8px; padding:1.4rem 1.5rem; margin-top:1.3rem; }
+  .panel h2 { font-family:"Red Hat Display",sans-serif; font-size:1.15rem; font-weight:700; margin-bottom:0.6rem; }
+  .spin { width:22px; height:22px; border:3px solid #ddd; border-top-color:var(--rh-red); border-radius:50%; animation:s .9s linear infinite; display:inline-block; vertical-align:middle; margin-right:0.5rem; }
+  @keyframes s { to { transform:rotate(360deg); } }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:0.7rem; margin-top:0.6rem; }
+  .link { border:1px solid var(--line); border-radius:6px; padding:0.7rem 0.9rem; text-decoration:none; color:inherit; display:block; }
+  .link:hover { border-color:#999; } .link b { display:block; font-size:0.95rem; } .link span { color:var(--muted); font-size:0.8rem; }
+  .cred { display:flex; align-items:center; gap:0.6rem; margin-top:0.5rem; font-size:0.95rem; }
+  code { font-family:"Red Hat Mono",monospace; background:#f2f2f2; border:1px solid var(--line); border-radius:4px; padding:0.15rem 0.5rem; }
+  .muted { color:var(--muted); font-size:0.88rem; line-height:1.5; }
+  .err { background:#fdecea; border-left:4px solid var(--rh-red); padding:0.8rem 1rem; border-radius:4px; }
+  .row { display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:1rem; }
+  .step { display:flex; gap:0.6rem; align-items:center; padding:0.35rem 0; color:var(--muted); }
+  .step.done { color:var(--ink); } .step .dot { width:10px; height:10px; border-radius:50%; background:#ccc; } .step.done .dot { background:#1a7f37; } .step.now .dot { background:var(--rh-red); }
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-in">
+  <a class="logo" href="/"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory</span></a>
+  <span class="spacer"></span><span class="who" id="who"></span>
+  <a class="btn ghost" id="adminLink" href="/hub/admin.html" hidden>Admin</a>
+  <a class="btn ghost" href="/oauth/sign_out?rd=%2F">Sign out</a>
+</div></nav>
+<main>
+  <h1>Your workbench</h1>
+  <div class="sub">AI Agents as Staff — the OpenShift Software Factory</div>
+  <div id="view" class="panel"><span class="spin"></span> Checking your workbench…</div>
+</main>
+<script>
+const view = document.getElementById('view');
+const STEPS = ['seat record','openshift user + groups','workspace namespace + policy','operator MANAGED_NAMESPACES','gitea user + org','argo applicationset generators','argo rbac rows','mattermost account','seat showroom','mark ready'];
+let timer = null;
+async function api(path, method='GET') { const r = await fetch(path, {method, credentials:'include', headers:{'Accept':'application/json'}}); return {ok:r.ok, status:r.status, data: await r.json().catch(()=>({}))}; }
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function render() {
+  const {ok, data} = await api('/api/seat');
+  if (!ok) { view.innerHTML = '<div class="err">Could not read your seat (' + esc(data.error||'error') + '). Reload, or sign in again from the <a href="/">landing page</a>.</div>'; return; }
+  document.getElementById('who').innerHTML = 'Signed in as <b>' + esc(data.user) + '</b>';
+  if (data.admin) document.getElementById('adminLink').hidden = false;
+  clearTimeout(timer);
+  if (data.phase === 'none') {
+    view.innerHTML = '<span class="spin"></span> Claiming a workbench for you…';
+    const r = await api('/api/seat/provision', 'POST');
+    if (r.status === 429) { view.innerHTML = '<div class="err">' + esc(r.data.error) + '</div>'; return; }
+    timer = setTimeout(render, 3000); return;
+  }
+  if (data.phase === 'provisioning' || data.phase === 'resetting') {
+    const now = STEPS.indexOf(data.step||'');
+    view.innerHTML = '<h2><span class="spin"></span>' + (data.phase === 'resetting' ? 'Resetting your workshop' : 'Setting up your workbench') + '</h2>'
+      + '<div class="muted">Your own OpenShift project, agent workspace, git organization, chat account, and workshop instance. First time takes two to four minutes.</div>'
+      + (data.phase === 'provisioning' ? '<div style="margin-top:0.8rem">' + STEPS.map((s,i)=>'<div class="step '+(i<now?'done':i===now?'now':'')+'"><span class="dot"></span>'+esc(s)+'</div>').join('') + '</div>' : '');
+    timer = setTimeout(render, 5000); return;
+  }
+  if (data.phase === 'error') {
+    view.innerHTML = '<div class="err"><b>Something went wrong at "' + esc(data.step) + '".</b><div class="muted">' + esc(data.detail||'') + '</div></div>'
+      + '<div class="row"><button class="btn" id="retry">Try again</button><a class="btn outline" href="/">Back to library</a></div>'
+      + '<div class="muted" style="margin-top:0.8rem">If it fails twice, tell your Red Hat host — they can reset your seat from the admin page.</div>';
+    document.getElementById('retry').onclick = async () => { await api('/api/seat/provision','POST'); render(); };
+    return;
+  }
+  // ready
+  const L = data.links || {};
+  view.innerHTML = '<h2>Ready — workbench <code>' + esc(data.handle) + '</code></h2>'
+    + '<div class="row"><a class="btn" href="' + L.workshop + '">Enter the workshop →</a></div>'
+    + '<div class="muted" style="margin-top:1rem">Your workshop terminal is already signed in as your workbench service account. Browser sign-ins (Dev Hub, GitOps, the console) use the account you registered with. Chat (Mattermost) and Gitea use your workbench password below.</div>'
+    + '<div class="cred">Username: <code>' + esc(data.handle) + '</code></div>'
+    + '<div class="cred">Workbench password: <code id="pw">••••••••••••••</code> <button class="btn outline" id="reveal" style="padding:0.25rem 0.7rem">show</button></div>'
+    + '<h2 style="margin-top:1.2rem">Your surfaces</h2><div class="grid">'
+    + [['Developer Hub','hire and inspect agents',L.devhub],['OpenShift GitOps','watch the rollout',L.gitops],['OpenShift console','your project: '+esc(data.handle)+'-agent-workspace',L.console],['Mattermost','talk to your agent',L.mattermost],['Gitea','your git organization',L.gitea]].map(([t,s,u])=>'<a class="link" href="'+u+'" target="_blank" rel="noopener"><b>'+t+'</b><span>'+s+'</span></a>').join('')
+    + '</div><h2 style="margin-top:1.2rem">Start over</h2><div class="muted">Restart wipes every agent, repository, and catalog entry your workbench created and returns it to a fresh Module 1. Your login and workbench stay.</div>'
+    + '<div class="row"><button class="btn dark" id="reset">Restart workshop</button></div>';
+  document.getElementById('reveal').onclick = () => { document.getElementById('pw').textContent = data.seat_password || '(unavailable)'; };
+  document.getElementById('reset').onclick = async () => { if (!confirm('Restart the workshop? Everything your workbench created will be deleted.')) return; await api('/api/seat/reset','POST'); render(); };
+}
+render();
+</script>
+</body>
+</html>

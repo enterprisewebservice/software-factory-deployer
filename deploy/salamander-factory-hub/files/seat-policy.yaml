@@ -1,0 +1,105 @@
+# Per-seat policy, applied by the provisioner with __HANDLE__/__USERNAME__ filled in.
+# The workspace: the person (real SSO identity) AND the seat's terminal
+# ServiceAccount are admins of it; nothing else is granted anywhere.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: seat-user-admin
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: admin }
+subjects:
+  - { kind: User, apiGroup: rbac.authorization.k8s.io, name: "__USERNAME__" }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: seat-terminal-admin
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: admin }
+subjects:
+  - { kind: ServiceAccount, name: showroom-__HANDLE__, namespace: showroom-__HANDLE__ }
+---
+# Cluster-scoped reads the workshop needs (Module 7: oc get modelconnections).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: seat-__HANDLE__-workshop-viewer
+  labels: { app.kubernetes.io/managed-by: factory-hub, factory-hub.redhat.com/seat: __HANDLE__ }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: workshop-viewer }
+subjects:
+  - { kind: ServiceAccount, name: showroom-__HANDLE__, namespace: showroom-__HANDLE__ }
+  - { kind: User, apiGroup: rbac.authorization.k8s.io, name: "__USERNAME__" }
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: seat-quota
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+spec:
+  hard:
+    pods: "30"
+    requests.cpu: "6"
+    requests.memory: 12Gi
+    limits.cpu: "12"
+    limits.memory: 24Gi
+    persistentvolumeclaims: "10"
+    requests.storage: 60Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: seat-limits
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+spec:
+  limits:
+    - type: Container
+      default: { cpu: "1", memory: 2Gi }
+      defaultRequest: { cpu: 100m, memory: 256Mi }
+      max: { cpu: "4", memory: 8Gi }
+---
+# Seats cannot talk to each other. Allowlist = same namespace + every
+# namespace that is NOT a seat (platform services, ingress, operators).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: seat-isolation
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchExpressions:
+              - { key: factory-hub.redhat.com/seat, operator: DoesNotExist }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: codex-subscription-credentials
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+spec:
+  refreshInterval: 1m
+  secretStoreRef: { kind: ClusterSecretStore, name: vault-cluster }
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: codex-subscription-credentials
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      metadata:
+        labels:
+          agentoffice.ai/credential: codex-subscription
+          app.kubernetes.io/managed-by: factory-hub
+  data:
+    - secretKey: auth.json
+      remoteRef: { key: codex-subscription-credentials, property: auth.json }

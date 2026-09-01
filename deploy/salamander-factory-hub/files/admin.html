@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seats — Red Hat Software Factory admin</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400;700&display=swap">
+<style>
+  :root { --rh-red:#ee0000; --ink:#151515; --muted:#4d4d4d; --line:#e0e0e0; --bg:#f2f2f2; }
+  * { margin:0; padding:0; box-sizing:border-box; } body { font-family:"Red Hat Text",system-ui,sans-serif; color:var(--ink); background:var(--bg); }
+  .nav { background:#000; color:#fff; } .nav-in { max-width:1120px; margin:0 auto; padding:0.7rem 1.5rem; display:flex; align-items:center; gap:0.9rem; }
+  .logo { display:flex; align-items:baseline; gap:0.6rem; font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.15rem; text-decoration:none; color:#fff; }
+  .logo .mark { width:0.85rem; height:1.35rem; background:var(--rh-red); border-radius:2px; transform:skewX(-8deg); display:inline-block; } .logo .thin { font-weight:400; color:#c7c7c7; } .spacer { flex:1; }
+  .btn { border:0; border-radius:4px; background:var(--rh-red); color:#fff; padding:0.4rem 0.9rem; font:600 0.82rem "Red Hat Text",sans-serif; cursor:pointer; text-decoration:none; }
+  .btn.dark { background:#151515; } .btn.ghost { background:transparent; border:1px solid #5a5a5a; color:#fff; } .btn[disabled] { opacity:.4; cursor:default; }
+  main { max-width:1120px; margin:0 auto; padding:2rem 1.5rem 3rem; } h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.6rem; }
+  .sub { color:var(--muted); margin-top:0.2rem; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:8px; margin-top:1.2rem; font-size:0.9rem; }
+  th, td { text-align:left; padding:0.6rem 0.8rem; border-top:1px solid var(--line); } th { border-top:0; color:var(--muted); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; }
+  code { font-family:"Red Hat Mono",monospace; background:#f2f2f2; border:1px solid var(--line); border-radius:4px; padding:0.1rem 0.4rem; }
+  .pill { font-size:0.72rem; font-weight:700; padding:0.12rem 0.55rem; border-radius:999px; } .ready { background:#e7f7ed; color:#1a7f37; } .provisioning, .resetting { background:#fdf1e2; color:#b25e09; } .error { background:#fdecea; color:#b3261e; }
+  .muted { color:var(--muted); font-size:0.85rem; }
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-in">
+  <a class="logo" href="/"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory · admin</span></a>
+  <span class="spacer"></span><a class="btn ghost" href="/hub/mylab.html">My workbench</a><a class="btn ghost" href="/oauth/sign_out?rd=%2F">Sign out</a>
+</div></nav>
+<main>
+  <h1>Seats</h1><div class="sub" id="sub">Every workbench provisioned through the hub. Reset returns a seat to Module 1; re-provision repairs a broken one.</div>
+  <div id="out"></div>
+</main>
+<script>
+const out = document.getElementById('out');
+async function api(p, m='GET'){ const r = await fetch(p,{method:m,credentials:'include',headers:{'Accept':'application/json'}}); return {ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}; }
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function render(){
+  const {ok,status,data} = await api('/api/admin/seats');
+  if (!ok) { out.innerHTML = '<p class="muted" style="margin-top:1rem">' + (status===403 ? 'Admins only.' : 'Could not load seats.') + '</p>'; return; }
+  document.getElementById('sub').textContent = data.seats.length + ' of ' + data.max + ' workbenches in use.';
+  out.innerHTML = '<table><tr><th>Handle</th><th>User</th><th>Email</th><th>Phase</th><th>Ready since</th><th>Last reset</th><th></th></tr>' + data.seats.map(s =>
+    '<tr><td><code>'+esc(s.handle)+'</code></td><td>'+esc(s.username)+'</td><td class="muted">'+esc(s.email||'')+'</td>'
+    + '<td><span class="pill '+esc(s.phase)+'">'+esc(s.phase)+(s.step&&s.phase!=='ready'?' · '+esc(s.step):'')+'</span></td>'
+    + '<td class="muted">'+esc((s.ready||'').replace('T',' ').slice(0,16))+'</td><td class="muted">'+esc((s.last_reset||'').replace('T',' ').slice(0,16))+'</td>'
+    + '<td style="white-space:nowrap"><button class="btn dark" data-a="reset" data-h="'+esc(s.handle)+'" '+(s.phase==='ready'||s.phase==='error'?'':'disabled')+'>Reset</button> '
+    + '<button class="btn" data-a="provision" data-h="'+esc(s.handle)+'" '+(s.job_running?'disabled':'')+'>Re-provision</button></td></tr>').join('') + '</table>';
+  out.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+    if (b.dataset.a==='reset' && !confirm('Reset seat '+b.dataset.h+'? All its agents, repos and catalog entries are deleted.')) return;
+    await api('/api/admin/seats/'+b.dataset.h+'/'+b.dataset.a,'POST'); render();
+  });
+}
+render(); setInterval(render, 8000);
+</script>
+</body>
+</html>

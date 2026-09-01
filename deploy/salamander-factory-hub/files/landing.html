@@ -72,7 +72,7 @@
     <span class="logo"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory</span></span>
     <span class="spacer"></span>
     <span class="who" id="who"></span>
-    <a class="btn ghost" id="authBtn" href="/oauth2/start?rd=%2F">Sign in</a>
+    <a class="btn ghost" id="authBtn" href="/oauth/start?rd=%2F">Sign in</a>
   </div>
 </nav>
 
@@ -154,20 +154,7 @@
   // Workshop entry points, gated behind /workshop/* (oauth2-proxy).
   const ROUTES = { "agents-as-staff": "/workshop/agents-as-staff/" };
 
-  // Reflect session state from the userinfo endpoint the proxy exposes.
-  fetch('/oauth2/userinfo', { credentials: 'include' })
-    .then(r => r.ok ? r.json() : null)
-    .then(u => {
-      if (u && (u.email || u.preferredUsername || u.user)) {
-        const who = document.getElementById('who');
-        who.innerHTML = 'Signed in as <b>' + (u.email || u.preferredUsername || u.user) + '</b>';
-        const b = document.getElementById('authBtn');
-        b.textContent = 'Sign out';
-        b.href = '/oauth2/sign_out?rd=%2F';
-      }
-    })
-    .catch(() => {});
-
+  // The landing is public (no session here); identity shows on /hub/mylab.html.
   const backdrop = document.getElementById('backdrop');
   const close = () => backdrop.classList.remove('on');
   document.getElementById('modalX').onclick = close;
@@ -180,7 +167,7 @@
       // The card opens the login modal; the proxy enforces the real
       // gate at /workshop/* regardless of what the page does.
       const go = document.getElementById('signinGo');
-      go.href = '/oauth2/start?rd=' + encodeURIComponent(dest);
+      go.href = '/oauth/start?rd=' + encodeURIComponent(dest);
       backdrop.classList.add('on');
     });
   });
