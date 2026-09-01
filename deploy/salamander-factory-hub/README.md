@@ -88,3 +88,14 @@ username; if it fails the DNS-safe pattern (longer than 20 characters, etc.) the
 Review Profile page asks for a valid one, and everything downstream sees an ordinary Keycloak
 user. Nothing in the workshop depends on GitHub itself.
 
+## Where hires publish: Gitea, never the person's GitHub
+
+The genesis template's `gitProvider: auto` publishes to Gitea **only when the signed-in user's
+catalog entity is `memberOf: attendees`** (a Keycloak group RHDH ingests); anyone else goes to
+`publish:github` into the platform's GitHub org with the platform token. So every seat is added
+to the Keycloak `attendees` group by the provisioner (and removed on Remove), the Keycloak org
+sync runs every minute, and the workbench page holds "Enter the workshop" until Developer Hub's
+entity for the person shows `attendees` (`devhub_ready` from the broker). Signing in through the
+GitHub broker changes nothing here — the routing never looks at GitHub identity; nobody needs a
+GitHub account or any GitHub setup.
+
