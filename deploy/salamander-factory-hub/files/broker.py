@@ -83,7 +83,7 @@ def run_job(name, command, env, backoff=0):
                     "template": {"metadata": {"labels": {"app": "factory-hub-job"}},
                                  "spec": {"serviceAccountName": "factory-provisioner", "restartPolicy": "Never",
                                           "containers": [{"name": "run", "image": PROVISION_IMAGE, "command": command,
-                                                          "env": [{"name": k, "value": v} for k, v in env.items()],
+                                                          "env": [{"name": k, "value": v} for k, v in env.items()] + [{"name": "GITEA_KEYCLOAK_SOURCE_ID", "value": os.environ.get("GITEA_KEYCLOAK_SOURCE_ID", "1")}],
                                                           "volumeMounts": [{"name": "scripts", "mountPath": "/scripts", "readOnly": True}]}],
                                           "volumes": [{"name": "scripts", "configMap": {"name": "factory-hub-scripts", "defaultMode": 0o755}}]}}}}
     code, _ = k8s("POST", f"/apis/batch/v1/namespaces/{S.HUB_NS}/jobs", job)

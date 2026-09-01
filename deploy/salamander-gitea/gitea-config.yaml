@@ -1,0 +1,19 @@
+{
+ "apiVersion": "v1",
+ "data": {
+  "app.ini": "APP_NAME = gitea\nRUN_MODE = prod\nRUN_USER = gitea\n\n[security]\nINTERNAL_TOKEN      = ${GITEA_INTERNAL_TOKEN}\nINSTALL_LOCK        = true\nSECRET_KEY          = ${GITEA_SECRET_KEY}\nPASSWORD_COMPLEXITY = off\n\n[oauth2]\nENABLED = false\n\n[database]\nDB_TYPE  = postgres\nHOST     = postgresql-gitea:5432\nNAME     = giteadb\nUSER     = giteauser\nPASSWD   = giteapassword\nSSL_MODE = disable\n\n[repository]\nROOT = /gitea-repositories\n\n[server]\nROOT_URL         = https://gitea-gitea.apps.salamander.aimlworkbench.com/\nSSH_DOMAIN       = gitea-gitea.apps.salamander.aimlworkbench.com\nDOMAIN           = gitea-gitea.apps.salamander.aimlworkbench.com\nHTTP_PORT        = 3000\nSSH_PORT         = 2022\nDISABLE_SSH      = True\nSTART_SSH_SERVER = False\nLFS_START_SERVER = True\nOFFLINE_MODE     = False\n\n[mailer]\nENABLED = False\n[service]\nREGISTER_EMAIL_CONFIRM            = False\nENABLE_NOTIFY_MAIL                = False\nDISABLE_REGISTRATION              = False\nENABLE_CAPTCHA                    = False\nREQUIRE_SIGNIN_VIEW               = false\nDEFAULT_KEEP_EMAIL_PRIVATE        = false\nDEFAULT_ALLOW_CREATE_ORGANIZATION = True\nDEFAULT_ENABLE_TIMETRACKING       = true\nNO_REPLY_ADDRESS                  = noreply.example.org\n\n[picture]\nDISABLE_GRAVATAR        = false\nENABLE_FEDERATED_AVATAR = true\n\n[openid]\nENABLE_OPENID_SIGNIN = false\nENABLE_OPENID_SIGNUP = false\n\n[webhook]\nALLOWED_HOST_LIST = external,private\nSKIP_TLS_VERIFY = False\n\n[session]\nPROVIDER = file\n\n[log]\nMODE      = file\nLEVEL     = Info\nROOT_PATH = /home/gitea/log\n\n[markup.asciidoc]\nENABLED = true\nFILE_EXTENSIONS = .adoc,.asciidoc\nRENDER_COMMAND = \"asciidoc --backend=xhtml11 --no-header-footer --attribute source-highlighter=source-highlight --out-file=- -\"\nIS_INPUT_FILE = false\n\n[oauth2_client]\n; Keycloak (realm factory) is the login for every seat surface: register\n; on first SSO login, link by username to seats the provisioner pre-created,\n; username = preferred_username (nickname claim). factory-hub 2026-09-01.\nENABLE_AUTO_REGISTRATION = true\nACCOUNT_LINKING = auto\nUSERNAME = nickname\nUPDATE_AVATAR = false\nREGISTER_EMAIL_CONFIRM = false\n"
+ },
+ "kind": "ConfigMap",
+ "metadata": {
+  "name": "gitea-config",
+  "namespace": "gitea",
+  "ownerReferences": [
+   {
+    "apiVersion": "pfe.rhpds.com/v1",
+    "kind": "Gitea",
+    "name": "gitea",
+    "uid": "33eb8889-8c8d-4c12-8750-342270ad5e59"
+   }
+  ]
+ }
+}

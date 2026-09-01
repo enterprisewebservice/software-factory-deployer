@@ -83,14 +83,12 @@ async function render() {
   const L = data.links || {};
   view.innerHTML = '<h2>Ready — workbench <code>' + esc(data.handle) + '</code></h2>'
     + '<div class="row"><a class="btn" href="' + L.workshop + '">Enter the workshop →</a></div>'
-    + '<div class="muted" style="margin-top:1rem">Your workshop terminal is already signed in as your workbench service account. Browser sign-ins (Dev Hub, GitOps, the console) use the account you registered with. Chat (Mattermost) and Gitea use your workbench password below.</div>'
+    + '<div class="muted" style="margin-top:1rem">One login everywhere: Developer Hub, GitOps, the console, Gitea, and chat all sign in with the account you registered. On Gitea and Mattermost use the <b>Sign in with your workshop account</b> button. Your workshop terminal is already signed in as your workbench service account.</div>'
     + '<div class="cred">Username: <code>' + esc(data.handle) + '</code></div>'
-    + '<div class="cred">Workbench password: <code id="pw">••••••••••••••</code> <button class="btn outline" id="reveal" style="padding:0.25rem 0.7rem">show</button></div>'
     + '<h2 style="margin-top:1.2rem">Your surfaces</h2><div class="grid">'
     + [['Developer Hub','hire and inspect agents',L.devhub],['OpenShift GitOps','watch the rollout',L.gitops],['OpenShift console','your project: '+esc(data.handle)+'-agent-workspace',L.console],['Mattermost','talk to your agent',L.mattermost],['Gitea','your git organization',L.gitea]].map(([t,s,u])=>'<a class="link" href="'+u+'" target="_blank" rel="noopener"><b>'+t+'</b><span>'+s+'</span></a>').join('')
     + '</div><h2 style="margin-top:1.2rem">Start over</h2><div class="muted">Restart wipes every agent, repository, and catalog entry your workbench created and returns it to a fresh Module 1. Your login and workbench stay.</div>'
     + '<div class="row"><button class="btn dark" id="reset">Restart workshop</button></div>';
-  document.getElementById('reveal').onclick = () => { document.getElementById('pw').textContent = data.seat_password || '(unavailable)'; };
   document.getElementById('reset').onclick = async () => { if (!confirm('Restart the workshop? Everything your workbench created will be deleted.')) return; await api('/api/seat/reset','POST'); render(); };
 }
 render();

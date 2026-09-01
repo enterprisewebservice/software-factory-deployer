@@ -1,29 +1,16 @@
-# Gitea on salamander (multi-user workshop testing)
-Install: `oc apply -k https://github.com/rhpds/gitea-operator/OLMDeploy` (operator, cluster-wide),
-then the Gitea CR below. The workload's gitea.yml stage configures users/orgs/tokens on top.
+# gitea — SSO to Keycloak (realm factory)
 
-## Login chain via Keycloak (verified 2026-08-24)
+Gitea (quay.io/rhpds/gitea, ns `gitea`) is not GitOps-managed; this directory records the
+pieces added on 2026-09-01 so every seat surface uses the one Keycloak login.
 
-Attendee sign-in is Dev Hub → Keycloak (realm `factory`) → **Gitea** as a brokered OIDC IdP.
-Three things make it work, all of which the workshop stages must encode:
-
-1. **Gitea's OAuth2 provider is disabled by the operator's default app.ini** (`[oauth2] ENABLED = false`
-   → `/login/oauth/authorize` returns 403 Forbidden). Fix is declarative: `gitea.yaml` sets
-   `giteaConfigMapName: gitea-config-factory` (custom `app.ini` in this directory with
-   `[oauth2] ENABLED = true`). `giteaHostname` must be set alongside it (operator requirement).
-2. **The broker OAuth app** (`keycloak-broker`, redirect `…/realms/factory/broker/gitea/endpoint`)
-   carries `skip_secondary_authorization: true` so attendees never see a consent screen.
-   ⚠️ Gitea's `PATCH /api/v1/user/applications/oauth2/{id}` **regenerates the client secret** on
-   every call — any update must immediately write the returned secret into the Keycloak IdP
-   (`identity-provider/instances/gitea` → `config.clientSecret`), or token exchange fails with
-   "invalid client secret".
-3. **Keycloak first-login auto-link**: realm `factory` has flow `auto-link-broker`
-   (`idp-create-user-if-unique` + `idp-auto-link`, both ALTERNATIVE) bound as the gitea IdP's
-   `firstBrokerLoginFlowAlias`, so a Gitea `userN` binds silently to the pre-created Keycloak
-   `userN` (attendees group) instead of prompting "account already exists". Bound to the **gitea
-   IdP only** — GitHub keeps the default confirm-link flow, since GitHub usernames are not ours
-   to trust for silent linking.
-4. **Issuer has no trailing slash**: the Keycloak IdP `config.issuer` must be
-   `https://gitea-…com` exactly as Gitea's discovery document states it — Gitea's ROOT_URL ends
-   with `/` but its token `iss` claim does not. A trailing slash fails first-login with
-   "Wrong issuer from token" after an otherwise-successful token exchange.
+* `gitea-config.yaml` — the live `gitea-config` ConfigMap (app.ini) with the `[oauth2_client]`
+  block: auto-registration on first SSO login, auto account-linking by username, username from
+  `preferred_username`. Apply + `oc rollout restart deployment/gitea -n gitea`.
+* OAuth2 authentication source `keycloak` (OpenID Connect, discovery
+  `https://auth.runtab.io/realms/factory/.well-known/openid-configuration`, client `gitea`) —
+  lives in Gitea's database; created with `gitea admin auth add-oauth`. Client secret in
+  Secret `gitea-keycloak-oidc` (ns gitea), never in git.
+* Keycloak client `gitea` (confidential, redirect
+  `https://gitea-gitea.apps.salamander.aimlworkbench.com/user/oauth2/keycloak/callback`).
+* Mattermost (Team Edition — no OpenID Connect) signs in through Gitea's OAuth2 provider using
+  Mattermost's GitLab integration; see `deploy/salamander-factory-hub/README.md`.

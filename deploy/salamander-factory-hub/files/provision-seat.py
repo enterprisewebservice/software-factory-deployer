@@ -144,11 +144,18 @@ try:
     g = secret_data("gitea-admin-credentials", "gitea")
     G = f"https://gitea-gitea.{APPS}/api/v1"
     auth = (g["username"], g["password"])
-    if http("GET", f"{G}/users/{HANDLE}", auth=auth)[0] != 200:
-        code, _ = http("POST", f"{G}/admin/users", {"username": HANDLE, "email": EMAIL, "password": PW,
-                                                     "must_change_password": False, "visibility": "public"}, auth=auth)
+    # SSO-linked account (Gitea auth source `keycloak`, id from env): no
+    # password — the person signs in to Gitea with their Keycloak login,
+    # and Gitea's ACCOUNT_LINKING=auto binds that login to this account.
+    code, gu = http("GET", f"{G}/users/{HANDLE}", auth=auth)
+    if code != 200:
+        body = {"username": HANDLE, "email": EMAIL, "must_change_password": False, "visibility": "public",
+                "source_id": int(os.environ.get("GITEA_KEYCLOAK_SOURCE_ID", "1")), "login_name": USER,
+                "password": PW}
+        code, gu = http("POST", f"{G}/admin/users", body, auth=auth)
         if code not in (201,):
             fail(f"gitea user create -> {code}")
+    GITEA_UID = str((gu or {}).get("id", ""))
     if http("GET", f"{G}/orgs/{ORG}", auth=auth)[0] != 200:
         code, _ = http("POST", f"{G}/admin/users/{HANDLE}/orgs", {"username": ORG, "visibility": "public"}, auth=auth)
         if code not in (201,):
@@ -213,10 +220,18 @@ try:
     mm = secret_data("mattermost-admin-token", "mattermost")
     MM = f"https://mattermost-mattermost.{APPS}/api/v4"
     hdr = {"Authorization": "Bearer " + mm["token"]}
+    # SSO-linked through Gitea (Mattermost Team Edition has no OpenID; its
+    # GitLab integration points at Gitea's OAuth2 provider). auth_data is
+    # the Gitea user id, so the first "Sign in with your workshop account"
+    # lands on this pre-created account instead of minting a duplicate.
     if http("GET", f"{MM}/users/username/{HANDLE}", headers=hdr)[0] != 200:
-        code, _ = http("POST", f"{MM}/users", {"email": EMAIL, "username": HANDLE, "password": PW}, headers=hdr)
+        body = {"email": EMAIL, "username": HANDLE, "auth_service": "gitlab", "auth_data": GITEA_UID}
+        code, _ = http("POST", f"{MM}/users", body, headers=hdr)
         if code not in (201,):
-            print(f"mattermost user create -> {code} (continuing; chat login may need admin help)")
+            print(f"mattermost sso user create -> {code}; falling back to a local account")
+            code, _ = http("POST", f"{MM}/users", {"email": EMAIL, "username": HANDLE, "password": PW}, headers=hdr)
+            if code not in (201,):
+                print(f"mattermost user create -> {code} (continuing; chat login may need admin help)")
 
     step("seat showroom")
     tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace("__PASSWORD__", PW)
