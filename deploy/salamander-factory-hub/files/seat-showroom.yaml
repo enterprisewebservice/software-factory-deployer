@@ -98,6 +98,7 @@ spec:
   - port: 8080
     protocol: TCP
     targetPort: 4180
+    name: proxy
   selector:
     app.kubernetes.io/name: showroom-__USER__
 
@@ -372,7 +373,7 @@ spec:
     kind: Service
     name: showroom-__USER__
   port:
-    targetPort: 8080
+    targetPort: 4180
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
