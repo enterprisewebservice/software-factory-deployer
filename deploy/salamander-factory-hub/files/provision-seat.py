@@ -34,7 +34,9 @@ def fail(msg):
     print(f"PROVISION FAILED at {CUR}: {msg}", flush=True)
     try:
         h = HANDLE if "HANDLE" in globals() else S.sanitize(USER)
-        S.write_seat(h, {"username": USER, "handle": h, "phase": "error", "step": CUR, "detail": str(msg)[:200]})
+        prev = S.read_seats().get(h, {})
+        prev.update({"username": USER, "handle": h, "phase": "error", "step": CUR, "detail": str(msg)[:200]})
+        S.write_seat(h, prev)
     except Exception as e:
         print("could not record error:", e)
     sys.exit(1)

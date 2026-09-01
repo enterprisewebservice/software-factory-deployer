@@ -79,7 +79,7 @@ spec:
             matchExpressions:
               - { key: factory-hub.redhat.com/seat, operator: DoesNotExist }
 ---
-apiVersion: external-secrets.io/v1
+apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: codex-subscription-credentials
