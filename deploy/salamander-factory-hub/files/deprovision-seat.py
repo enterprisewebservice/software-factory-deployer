@@ -72,6 +72,17 @@ try:
         print("  token revoke:", http("DELETE", f"{G}/users/{H}/tokens/{tid}", auth=auth, headers={"Sudo": H}))
 except Exception as e:
     print("  token: none recorded", str(e)[:60])
+# Gitea refuses to delete an org that still owns repositories (500).
+# reset-seat.sh removed the agent/service repos; anything else the
+# person created in their org goes too — the org is theirs alone.
+try:
+    req = urllib.request.Request(f"{G}/orgs/{ORG}/repos?limit=100")
+    req.add_header("Authorization", "Basic " + base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode())
+    with urllib.request.urlopen(req, timeout=30) as r:
+        for repo in json.load(r):
+            print("  repo:", repo["name"], http("DELETE", f"{G}/repos/{ORG}/{repo['name']}", auth=auth))
+except Exception as e:
+    print("  repo listing:", str(e)[:80])
 print("  org:", http("DELETE", f"{G}/orgs/{ORG}", auth=auth), " user:", http("DELETE", f"{G}/admin/users/{H}?purge=true", auth=auth))
 
 print("== mattermost account (deactivate) ==", flush=True)
