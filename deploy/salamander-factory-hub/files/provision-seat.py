@@ -130,19 +130,13 @@ try:
     pol = open("/scripts/seat-policy.yaml").read().replace("__HANDLE__", HANDLE).replace("__USERNAME__", USER)
     S.oc("apply", "-f", "-", input=pol)
 
-    step("operator MANAGED_NAMESPACES")
-    sub = json.loads(S.oc("get", "sub", "agent-office-operator", "-n", "agent-office-operator", "-o", "json"))
-    envs = sub.setdefault("spec", {}).setdefault("config", {}).setdefault("env", [])
-    for e in envs:
-        if e["name"] == "MANAGED_NAMESPACES":
-            vals = [v for v in e["value"].split(",") if v]
-            if NS not in vals:
-                e["value"] = ",".join(vals + [NS])
-                S.oc("patch", "sub", "agent-office-operator", "-n", "agent-office-operator", "--type=merge",
-                     "-p", json.dumps({"spec": {"config": {"env": envs}}}))
-            break
-    else:
-        fail("MANAGED_NAMESPACES env missing on the operator Subscription")
+    step("operator discovery label")
+    # The operator's MANAGED_NAMESPACES env is GitOps-owned (Argo selfHeal
+    # reverts live patches within seconds — proven 2026-09-01). Dynamic
+    # seats are discovered by label instead (operator >= v1.7.63 unions
+    # the env list with namespaces carrying agentoffice.ai/managed=true
+    # and restarts itself when the set changes). Reversible by unlabeling.
+    S.oc("label", "ns", NS, "agentoffice.ai/managed=true", "--overwrite")
 
     step("gitea user + org")
     g = secret_data("gitea-admin-credentials", "gitea")

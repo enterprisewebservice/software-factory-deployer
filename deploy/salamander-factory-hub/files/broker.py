@@ -12,7 +12,7 @@ reach this port. Seat state lives in the factory-seats ConfigMap
   POST /api/seat/provision     kick provisioning (idempotent, capped by MAX_SEATS)
   POST /api/seat/reset         "restart workshop": reset-seat.sh <handle> --confirm
   GET  /api/admin/seats        all seats (admins only)
-  POST /api/admin/seats/<h>/reset | /provision
+  POST /api/admin/seats/<h>/reset | /provision | /deprovision (admin)
 """
 import json, os, ssl, sys, time, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -179,6 +179,12 @@ class H(BaseHTTPRequestHandler):
             write_seat(h, rec)
             ok = run_job(f"reset-{h}", ["bash", "/scripts/reset-entry.sh", h], {"SEAT_HANDLE": h, "SEAT_USER": u})
             return self.send(202 if ok else 500, {"phase": "resetting" if ok else "error"})
+        if action == "deprovision":
+            if self.user() not in ADMINS:
+                return self.send(403, {"error": "admins only"})
+            write_seat(h, dict(rec or {}, phase="removing"))
+            ok = run_job(f"deprovision-{h}", ["python3", "/scripts/deprovision-seat.py"], {"SEAT_HANDLE": h, "SEAT_USER": u})
+            return self.send(202 if ok else 500, {"phase": "removing" if ok else "error"})
         return self.send(404, {"error": "unknown action"})
 
 

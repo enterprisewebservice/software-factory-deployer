@@ -44,9 +44,11 @@ async function render(){
     + '<td><span class="pill '+esc(s.phase)+'">'+esc(s.phase)+(s.step&&s.phase!=='ready'?' · '+esc(s.step):'')+'</span></td>'
     + '<td class="muted">'+esc((s.ready||'').replace('T',' ').slice(0,16))+'</td><td class="muted">'+esc((s.last_reset||'').replace('T',' ').slice(0,16))+'</td>'
     + '<td style="white-space:nowrap"><button class="btn dark" data-a="reset" data-h="'+esc(s.handle)+'" '+(s.phase==='ready'||s.phase==='error'?'':'disabled')+'>Reset</button> '
-    + '<button class="btn" data-a="provision" data-h="'+esc(s.handle)+'" '+(s.job_running?'disabled':'')+'>Re-provision</button></td></tr>').join('') + '</table>';
+    + '<button class="btn" data-a="provision" data-h="'+esc(s.handle)+'" '+(s.job_running?'disabled':'')+'>Re-provision</button> '
+    + '<button class="btn" style="background:#6a6e73" data-a="deprovision" data-h="'+esc(s.handle)+'" '+(s.job_running?'disabled':'')+'>Remove</button></td></tr>').join('') + '</table>';
   out.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
     if (b.dataset.a==='reset' && !confirm('Reset seat '+b.dataset.h+'? All its agents, repos and catalog entries are deleted.')) return;
+    if (b.dataset.a==='deprovision' && !confirm('REMOVE seat '+b.dataset.h+' entirely (namespaces, git org, chat account)? The person keeps their login and can claim a fresh seat.')) return;
     await api('/api/admin/seats/'+b.dataset.h+'/'+b.dataset.a,'POST'); render();
   });
 }

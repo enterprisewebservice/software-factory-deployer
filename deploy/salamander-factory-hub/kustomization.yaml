@@ -21,6 +21,7 @@ configMapGenerator:
   - name: factory-hub-scripts
     files:
       - provision-seat.py=files/provision-seat.py
+      - deprovision-seat.py=files/deprovision-seat.py
       - seatlib.py=files/seatlib.py
       - reset-seat.sh=files/reset-seat.sh
       - reset-entry.sh=files/reset-entry.sh
