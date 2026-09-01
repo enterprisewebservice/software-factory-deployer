@@ -5,7 +5,7 @@
 #
 #   PUBLIC   /  /hub/assets/*  the landing page — browse with no account
 #   AUTH     /oauth/*          OpenShift oauth-proxy -> cluster OAuth -> Keycloak (factory-sso)
-#   GATED    /workshop/*       requires a signed-in session; per person
+#   WORKSHOP on the seat's own hostname, guarded by its own oauth-proxy (SAR)
 #
 # oauth-proxy is the only ingress. It skip-auths the landing and its
 # assets, runs the OIDC dance for everything else, and forwards the
@@ -35,8 +35,6 @@ data:
       access_log /dev/stdout;
       client_body_temp_path /tmp/client_body;
       proxy_temp_path /tmp/proxy;
-      # Cluster DNS, for resolving per-seat showroom services at request time.
-      resolver 172.30.0.10 valid=10s;
       map $http_upgrade $connection_upgrade { default upgrade; '' close; }
 
       server {
@@ -57,42 +55,12 @@ data:
           proxy_set_header X-Forwarded-User $http_x_forwarded_user;
           proxy_read_timeout 60s;
         }
-        # nginx subrequest: which showroom answers for this session?
-        location = /_resolve {
-          internal;
-          proxy_pass http://127.0.0.1:9000/api/resolve;
-          proxy_pass_request_body off;
-          proxy_set_header Content-Length "";
-          proxy_set_header X-Forwarded-User $http_x_forwarded_user;
-        }
 
-        # -- the person's OWN showroom: every path the hub does not own -----
-        # Showroom is not subpath-aware: the guide, its assets, and the
-        # web terminal all use absolute paths (/modules, /_/, /wetty...).
-        # So the whole root proxies to the signed-in person's showroom,
-        # same paths, and /workshop/agents-as-staff/ is just the door.
-        # oauth-proxy enforced auth and set X-Forwarded-User; the broker
-        # maps that user to showroom-<handle>.svc (401 = no seat yet ->
-        # the workbench page, which provisions and polls).
-        location = /workshop/agents-as-staff  { return 302 /index.html; }
-        location = /workshop/agents-as-staff/ { return 302 /index.html; }
-        location / {
-          auth_request /_resolve;
-          auth_request_set $seat_upstream $upstream_http_x_seat_upstream;
-          error_page 401 403 = @noseat;
-          proxy_pass http://$seat_upstream;
-          proxy_http_version 1.1;
-          proxy_set_header Host $host;
-          proxy_set_header X-Forwarded-Proto https;
-          proxy_set_header Upgrade $http_upgrade;
-          proxy_set_header Connection $connection_upgrade;
-          proxy_read_timeout 1h;
-          proxy_send_timeout 1h;
-          proxy_buffering off;
-          error_page 502 503 504 = @provisioning;
-        }
-        location @noseat { return 302 /hub/mylab.html; }
-        location @provisioning { try_files /site/provisioning.html =404; }
+        # -- the workshop lives on the seat's OWN hostname ----------------
+        # (guarded there by its own oauth-proxy + SubjectAccessReview).
+        # The hub never proxies it: the door just leads to the workbench
+        # page, which links to the seat. No Showroom path knowledge here.
+        location ~ ^/workshop/ { return 302 /hub/mylab.html; }
       }
     }
 ---

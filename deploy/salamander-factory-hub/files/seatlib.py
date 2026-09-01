@@ -69,7 +69,7 @@ def write_seat(handle: str, rec: dict):
 
 def links(handle: str) -> dict:
     return {
-        "workshop": "/workshop/agents-as-staff/",
+        "workshop": f"https://showroom-{handle}-showroom-{handle}.{APPS}/",
         "console": f"https://console-openshift-console.{APPS}",
         "devhub": f"https://v1-developer-hub-rhdh-test.{APPS}",
         "gitops": f"https://openshift-gitops-server-openshift-gitops.{APPS}",

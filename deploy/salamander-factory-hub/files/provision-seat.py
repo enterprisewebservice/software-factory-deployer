@@ -279,6 +279,12 @@ try:
                 print(f"mattermost user create -> {code} (continuing; chat login may need admin help)")
 
     step("seat showroom")
+    # Cookie secret for the seat's own oauth-proxy (kept across repairs).
+    if subprocess.run(["oc", "get", "secret", f"showroom-{HANDLE}-proxy", "-n", SNS], capture_output=True).returncode != 0:
+        psec = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": f"showroom-{HANDLE}-proxy", "namespace": SNS,
+                "labels": {"app.kubernetes.io/managed-by": "factory-hub"}}, "type": "Opaque",
+                "data": {"cookie-secret": base64.b64encode(secrets.token_urlsafe(32).encode()).decode()}}
+        S.oc("apply", "-f", "-", input=json.dumps(psec))
     tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace("__PASSWORD__", PW)
     tmpl = tmpl.replace(f"    user: {HANDLE}\n", f"    user: {HANDLE}\n    keycloak_user: {USER}\n")
     S.oc("apply", "-f", "-", input=tmpl)
