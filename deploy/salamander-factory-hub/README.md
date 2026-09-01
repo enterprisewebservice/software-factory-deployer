@@ -31,7 +31,7 @@ custom identity providers, nothing in cluster auth config is touched.
   `login_name`) so their org exists before their first click. Mattermost Team Edition has no
   OpenID Connect, so its GitLab integration points at Gitea's OAuth2 provider (app
   `mattermost` in Gitea, Secret `mattermost-gitea-oauth`; env `MM_GITLABSETTINGS_*` on the
-  Deployment, button "Sign in with your workshop account"); the seat pre-creates the
+  Deployment). **Team Edition v11 renders no SSO button on its login page** even with the provider active, so chat is entered through the SSO URL `…/oauth/gitlab/login?redirect_to=%2F` — the seat userdata sets `mattermost_url` to it, so every module link and the workbench tile sign the person in automatically; the seat pre-creates the
   Mattermost account as a `gitlab`-auth user keyed to the Gitea user id, so the first SSO
   click lands on it. A generated seat password still exists (Secret `seat-<handle>`) only as
   the fallback if SSO account creation fails; it is no longer shown.

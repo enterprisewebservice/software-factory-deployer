@@ -118,7 +118,7 @@ data:
     openshift_api_url: https://api.salamander.aimlworkbench.com:6443
     devhub_url: https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com
     gitops_url: https://openshift-gitops-server-openshift-gitops.apps.salamander.aimlworkbench.com
-    mattermost_url: https://mattermost-mattermost.apps.salamander.aimlworkbench.com
+    mattermost_url: https://mattermost-mattermost.apps.salamander.aimlworkbench.com/oauth/gitlab/login?redirect_to=%2F
     ocp_version: "4.21"
 ---
 # Source: showroom-single-pod/templates/pvc.yaml

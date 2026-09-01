@@ -73,6 +73,6 @@ def links(handle: str) -> dict:
         "console": f"https://console-openshift-console.{APPS}",
         "devhub": f"https://v1-developer-hub-rhdh-test.{APPS}",
         "gitops": f"https://openshift-gitops-server-openshift-gitops.{APPS}",
-        "mattermost": f"https://mattermost-mattermost.{APPS}",
+        "mattermost": f"https://mattermost-mattermost.{APPS}/oauth/gitlab/login?redirect_to=%2F",
         "gitea": f"https://gitea-gitea.{APPS}/{handle}-agents",
     }

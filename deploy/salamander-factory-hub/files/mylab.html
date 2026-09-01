@@ -83,10 +83,10 @@ async function render() {
   const L = data.links || {};
   view.innerHTML = '<h2>Ready — workbench <code>' + esc(data.handle) + '</code></h2>'
     + '<div class="row"><a class="btn" href="' + L.workshop + '">Enter the workshop →</a></div>'
-    + '<div class="muted" style="margin-top:1rem">One login everywhere: Developer Hub, GitOps, the console, Gitea, and chat all sign in with the account you registered. On Gitea and Mattermost use the <b>Sign in with your workshop account</b> button. Your workshop terminal is already signed in as your workbench service account.</div>'
+    + '<div class="muted" style="margin-top:1rem">One login everywhere: Developer Hub, GitOps, the console, Gitea, and chat all sign in with the account you registered. On Gitea use the <b>Sign in with keycloak</b> button; the Mattermost link below signs you in automatically. Your workshop terminal is already signed in as your workbench service account.</div>'
     + '<div class="cred">Username: <code>' + esc(data.handle) + '</code></div>'
     + '<h2 style="margin-top:1.2rem">Your surfaces</h2><div class="grid">'
-    + [['Developer Hub','hire and inspect agents',L.devhub],['OpenShift GitOps','watch the rollout',L.gitops],['OpenShift console','your project: '+esc(data.handle)+'-agent-workspace',L.console],['Mattermost','talk to your agent',L.mattermost],['Gitea','your git organization',L.gitea]].map(([t,s,u])=>'<a class="link" href="'+u+'" target="_blank" rel="noopener"><b>'+t+'</b><span>'+s+'</span></a>').join('')
+    + [['Developer Hub','hire and inspect agents',L.devhub],['OpenShift GitOps','watch the rollout',L.gitops],['OpenShift console','your project: '+esc(data.handle)+'-agent-workspace',L.console],['Mattermost','chat with your agent — this link signs you in',L.mattermost],['Gitea','your git organization',L.gitea]].map(([t,s,u])=>'<a class="link" href="'+u+'" target="_blank" rel="noopener"><b>'+t+'</b><span>'+s+'</span></a>').join('')
     + '</div><h2 style="margin-top:1.2rem">Start over</h2><div class="muted">Restart wipes every agent, repository, and catalog entry your workbench created and returns it to a fresh Module 1. Your login and workbench stay.</div>'
     + '<div class="row"><button class="btn dark" id="reset">Restart workshop</button></div>';
   document.getElementById('reset').onclick = async () => { if (!confirm('Restart the workshop? Everything your workbench created will be deleted.')) return; await api('/api/seat/reset','POST'); render(); };
