@@ -14,7 +14,7 @@ reach this port. Seat state lives in the factory-seats ConfigMap
   GET  /api/admin/seats        all seats (admins only)
   POST /api/admin/seats/<h>/reset | /provision | /deprovision (admin)
 """
-import json, os, ssl, sys, time, urllib.request, urllib.error
+import json, os, ssl, sys, time, urllib.request, urllib.error, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, "/app")
 import seatlib as S
@@ -52,6 +52,33 @@ def seats():
 
 def write_seat(handle, rec):
     k8s("PATCH", f"/api/v1/namespaces/{S.HUB_NS}/configmaps/{S.SEATS_CM}", {"data": {handle: json.dumps(rec)}})
+
+
+RHDH = "https://v1-developer-hub-rhdh-test.apps.salamander.aimlworkbench.com"
+_rhdh_tok = None
+
+
+def devhub_ready(username):
+    """True once RHDH's Keycloak org sync has produced this person's User
+    entity WITH memberOf attendees — the exact condition the genesis
+    template's gitProvider=auto needs to publish into Gitea. Until then
+    the workbench page holds the Enter button (sync runs every minute)."""
+    global _rhdh_tok
+    if _rhdh_tok is None:
+        code, sec = k8s("GET", f"/api/v1/namespaces/{S.HUB_NS}/secrets/rhdh-token")
+        import base64
+        _rhdh_tok = base64.b64decode(sec["data"]["token"]).decode() if code == 200 else ""
+    if not _rhdh_tok:
+        return None
+    try:
+        req = urllib.request.Request(f"{RHDH}/api/catalog/entities/by-name/user/default/{urllib.parse.quote(username)}")
+        req.add_header("Authorization", "Bearer " + _rhdh_tok)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            ent = json.load(r)
+        groups = [g.split("/")[-1] for g in (ent.get("spec", {}).get("memberOf") or [])]
+        return "attendees" in groups
+    except Exception:
+        return False
 
 
 def seat_password(handle):
@@ -119,6 +146,7 @@ class H(BaseHTTPRequestHandler):
                "admin": u in ADMINS, "links": S.links(h)}
         if rec.get("phase") == "ready":
             out["seat_password"] = seat_password(h)
+            out["devhub_ready"] = devhub_ready(u)
         return out
 
     def do_GET(self):

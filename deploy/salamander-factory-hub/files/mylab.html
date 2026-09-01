@@ -79,10 +79,15 @@ async function render() {
     document.getElementById('retry').onclick = async () => { await api('/api/seat/provision','POST'); render(); };
     return;
   }
-  // ready
+  // ready — but hold the door until Developer Hub knows this person is an
+  // attendee (its Keycloak sync runs every minute); a hire before that
+  // would publish to GitHub instead of their Gitea org.
   const L = data.links || {};
+  const gate = data.devhub_ready === false;
+  if (gate) timer = setTimeout(render, 5000);
   view.innerHTML = '<h2>Ready — workbench <code>' + esc(data.handle) + '</code></h2>'
-    + '<div class="row"><a class="btn" href="' + L.workshop + '">Enter the workshop →</a></div>'
+    + (gate ? '<div class="muted"><span class="spin"></span>Finishing your Developer Hub registration (under a minute)…</div>' : '')
+    + '<div class="row"><a class="btn" ' + (gate ? 'style="pointer-events:none;opacity:.5"' : '') + ' href="' + L.workshop + '">Enter the workshop →</a></div>'
     + '<div class="muted" style="margin-top:1rem">One login everywhere: Developer Hub, GitOps, the console, Gitea, and chat all sign in with the account you registered. On Gitea use the <b>Sign in with keycloak</b> button; the Mattermost link below signs you in automatically. Your workshop terminal is already signed in as your workbench service account.</div>'
     + '<div class="cred">Username: <code>' + esc(data.handle) + '</code></div>'
     + '<h2 style="margin-top:1.2rem">Your surfaces</h2><div class="grid">'
