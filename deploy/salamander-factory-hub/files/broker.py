@@ -2,12 +2,12 @@
 """factory-hub broker — seat lookup, provisioning, reset, admin.
 
 Listens on 127.0.0.1:9000 behind nginx, which sits behind OpenShift
-oauth-proxy. Identity is the X-Forwarded-User header oauth-proxy sets
+oauth-proxy. The workshop itself is NOT proxied here: each seat is on
+its own hostname behind its own oauth-proxy (SubjectAccessReview). Identity is the X-Forwarded-User header oauth-proxy sets
 from the OpenShift session; nginx forwards it and nothing else can
 reach this port. Seat state lives in the factory-seats ConfigMap
 (keyed by handle); provisioning and reset run as Jobs.
 
-  GET  /api/resolve            nginx auth_request: 200 + X-Seat-Upstream, else 401
   GET  /api/seat               this person's seat status (+ links, seat password when ready)
   POST /api/seat/provision     kick provisioning (idempotent, capped by MAX_SEATS)
   POST /api/seat/reset         "restart workshop": reset-seat.sh <handle> --confirm
@@ -151,11 +151,6 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = self.user()
-        if self.path.startswith("/api/resolve"):
-            h, rec = S.seat_for(u, seats()) if u else (None, None)
-            if rec and rec.get("phase") == "ready":
-                return self.send(200, {"handle": h}, {"X-Seat-Upstream": f"showroom-{h}.showroom-{h}.svc.cluster.local:8080"})
-            return self.send(401, {"phase": rec.get("phase") if rec else "none"})
         if not u:
             return self.send(401, {"error": "no identity"})
         if self.path.startswith("/api/seat"):
