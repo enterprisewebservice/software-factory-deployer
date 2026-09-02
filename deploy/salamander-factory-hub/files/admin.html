@@ -38,7 +38,7 @@
     <button class="btn" id="removeSel" disabled>Remove selected</button>
     <button class="btn dark" id="removeAll">Remove all attendees</button>
     <label><input type="checkbox" id="purge" checked> also delete their sign-in accounts (Keycloak + OpenShift user)</label>
-    <span class="note">Wholesale removal: namespaces, agents, git org, chat account, seat record. Admin seats are never included.</span>
+    <span class="note">Applies to the row buttons too. Removal covers namespaces, agents, git org, chat account and the seat record; with the box ticked, the person's login as well. Admin seats are never included in bulk removal.</span>
   </div>
   <div id="out"></div>
 </main>
@@ -83,8 +83,9 @@ async function render(){
   syncBulk();
   out.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
     if (b.dataset.a==='reset' && !confirm('Reset seat '+b.dataset.h+'? All its agents, repos and catalog entries are deleted.')) return;
-    if (b.dataset.a==='deprovision' && !confirm('REMOVE seat '+b.dataset.h+' entirely (namespaces, git org, chat account)? The person keeps their login and can claim a fresh seat.')) return;
-    await api('/api/admin/seats/'+b.dataset.h+'/'+b.dataset.a,'POST'); render();
+    const purge = document.getElementById('purge').checked;
+    if (b.dataset.a==='deprovision' && !confirm('REMOVE seat '+b.dataset.h+' entirely (namespaces, git org, chat account)'+(purge ? ' AND delete their sign-in account? They would have to register again.' : ')? The person keeps their login and can claim a fresh seat.'))) return;
+    await api('/api/admin/seats/'+b.dataset.h+'/'+b.dataset.a+(b.dataset.a==='deprovision'&&purge?'?purge_login=1':''),'POST'); render();
   });
 }
 render(); setInterval(render, 8000);

@@ -215,7 +215,7 @@ class H(BaseHTTPRequestHandler):
         if parts[:2] == ["api", "seat"] and len(parts) == 3:
             h, rec = S.seat_for(u, all_seats)
             return self.act(parts[2], u, h, rec, all_seats)
-        # /api/admin/seats/<h>/<action>
+        # /api/admin/seats/<h>/<action>[?purge_login=1]
         if parts[:3] == ["api", "admin", "seats"] and len(parts) == 5:
             if u not in ADMINS:
                 return self.send(403, {"error": "admins only"})
@@ -223,6 +223,7 @@ class H(BaseHTTPRequestHandler):
             rec = all_seats.get(h)
             if not rec:
                 return self.send(404, {"error": "no such seat"})
+            self.purge_login = "purge_login=1" in (self.path.split("?", 1) + [""])[1]
             return self.act(parts[4], rec.get("username", ""), h, rec, all_seats)
         return self.send(404, {"error": "not found"})
 
@@ -249,8 +250,11 @@ class H(BaseHTTPRequestHandler):
             if job_active(f"provision-{h}") or job_active(f"reset-{h}"):
                 return self.send(409, {"error": "a provision/reset job is still running for this seat — wait for it to finish"})
             write_seat(h, dict(rec or {}, phase="removing"))
-            ok = run_job(f"deprovision-{h}", ["python3", "/scripts/deprovision-seat.py"], {"SEAT_HANDLE": h, "SEAT_USER": u})
-            return self.send(202 if ok else 500, {"phase": "removing" if ok else "error"})
+            env = {"SEAT_HANDLE": h, "SEAT_USER": u}
+            if getattr(self, "purge_login", False):
+                env["PURGE_LOGIN"] = "1"  # the admin page's "also delete their sign-in accounts" box
+            ok = run_job(f"deprovision-{h}", ["python3", "/scripts/deprovision-seat.py"], env)
+            return self.send(202 if ok else 500, {"phase": "removing" if ok else "error", "purge_login": bool(env.get("PURGE_LOGIN"))})
         return self.send(404, {"error": "unknown action"})
 
 
