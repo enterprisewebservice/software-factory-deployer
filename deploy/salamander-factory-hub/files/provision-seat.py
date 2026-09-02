@@ -291,7 +291,10 @@ try:
     # (Instructor seats keep a real value in their own userdata.)
     tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace(
         "__PASSWORD__", "the password you chose when you signed up")
-    tmpl = tmpl.replace(f"    user: {HANDLE}\n", f"    user: {HANDLE}\n    keycloak_user: {USER}\n")
+    # seat_mode drives the guide's ifeval blocks: a self-service reader
+    # only ever sees self-service instructions (no mention of other seat
+    # types); instructor seats default to seat_mode=seat in the content.
+    tmpl = tmpl.replace(f"    user: {HANDLE}\n", f"    user: {HANDLE}\n    keycloak_user: {USER}\n    seat_mode: self-service\n")
     S.oc("apply", "-f", "-", input=tmpl)
     # Showroom renders the guide from userdata at pod start only, so a
     # ConfigMap-only change would leave the old guide serving. A hash of
