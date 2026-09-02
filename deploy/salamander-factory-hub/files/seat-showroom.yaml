@@ -184,7 +184,9 @@ spec:
         - --cookie-refresh=0s
         # Log requests: the only way to tell "the browser never asked" from
         # "the gate refused" when a pane or the terminal goes blank.
-        - --request-logging=true
+        # NO --request-logging: openshift oauth-proxy's logging wrapper (responseLogger)
+        # has no Hijack method, so every WebSocket upgrade (the ttyd terminal at
+        # /terminal/ws) fails with a silent 500 while the flag is on. Proven 2026-09-02.
         - --openshift-sar={"namespace":"showroom-__USER__","resource":"services","verb":"get"}
         - --skip-provider-button=true
         - --pass-user-headers=true
