@@ -182,8 +182,6 @@ spec:
         # refresh: one sign-in covers a full workshop day.
         - --cookie-expire=12h0m0s
         - --cookie-refresh=0s
-        # Log requests: the only way to tell "the browser never asked" from
-        # "the gate refused" when a pane or the terminal goes blank.
         # NO --request-logging: openshift oauth-proxy's logging wrapper (responseLogger)
         # has no Hijack method, so every WebSocket upgrade (the ttyd terminal at
         # /terminal/ws) fails with a silent 500 while the flag is on. Proven 2026-09-02.
