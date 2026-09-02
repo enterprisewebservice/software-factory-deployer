@@ -60,6 +60,20 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: use-age
 subjects:
   - { kind: ServiceAccount, name: default, namespace: __HANDLE__-agent-workspace }
 ---
+# The chat bridge (agent-office/mm-bridge) relays Mattermost messages to
+# the seat's agents by exec-ing into their gateway pods; it discovers the
+# seat by the agentoffice.ai/managed label and needs this access here.
+# The deployer gives the fixed seats an equivalent namespaced Role.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mm-bridge
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: mm-bridge-seat }
+subjects:
+  - { kind: ServiceAccount, name: mm-bridge, namespace: agent-office }
+---
 apiVersion: v1
 kind: ResourceQuota
 metadata:
