@@ -9,8 +9,9 @@
 # sequence. (Running antora alone overwrites the UI shell's index.html
 # with Antora's redirect page: the tabs and terminal vanish.)
 set -uo pipefail
-NSS=("$@"); [ ${#NSS[@]} -gt 0 ] || mapfile -t NSS < <(oc get ns -o name | sed 's#namespace/##' | grep -E '^showroom-')
-for ns in "${NSS[@]}"; do
+# plain word lists: this runs from laptops with bash 3.2 (macOS) as well as Linux
+NSS="$*"; [ -n "$NSS" ] || NSS=$(oc get ns -o name | sed 's#namespace/##' | grep -E '^showroom-' | tr '\n' ' ')
+for ns in $NSS; do
   # the Showroom pod is the one with a `content` container (a namespace may also host a hub/nginx pod)
   pod=$(oc get pods -n "$ns" -o json --field-selector=status.phase=Running 2>/dev/null | python3 -c '
 import json,sys
