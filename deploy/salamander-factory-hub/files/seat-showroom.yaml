@@ -174,8 +174,14 @@ spec:
         - --login-url=https://oauth-openshift.apps.salamander.aimlworkbench.com/oauth/authorize?idp=factory-sso
         - --upstream=http://127.0.0.1:8080
         - --cookie-secret-file=/etc/proxy/secrets/cookie-secret
-        - --cookie-expire=8h0m0s
-        - --cookie-refresh=1h0m0s
+        # The workshop UI loads every module page inside an iframe that is
+        # the same origin as this proxy. A mid-session cookie refresh answers
+        # that iframe request with a redirect into the OAuth server, which
+        # refuses to be framed, so the content pane goes blank until the
+        # attendee reloads (Module 3 "entirely blank", 2026-09-02). No
+        # refresh: one sign-in covers a full workshop day.
+        - --cookie-expire=12h0m0s
+        - --cookie-refresh=0s
         - --openshift-sar={"namespace":"showroom-__USER__","resource":"services","verb":"get"}
         - --skip-provider-button=true
         - --pass-user-headers=true
