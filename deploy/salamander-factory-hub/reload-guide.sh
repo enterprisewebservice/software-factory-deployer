@@ -25,7 +25,14 @@ for p in json.load(sys.stdin)["items"]:
       git checkout -q -- content/antora.yml
       git pull -q
       rev=$(git log -1 --format=%h)
-      # the image entrypoint, minus its last line (exec http.server — already running)
+      # 1. the guide itself. The image entrypoint SKIPS the antora build when
+      #    content is already present (it only builds on a fresh clone), so
+      #    build explicitly — same command, same merged antora.yml.
+      yq -i ".asciidoc.attributes *= load(\"/user_data/user_data.yml\")" content/antora.yml
+      antora --to-dir=/showroom/www "${ANTORA_PLAYBOOK:-site.yml}" >/tmp/antora.log 2>&1 || { tail -20 /tmp/antora.log; exit 1; }
+      # 2. the UI shell: antora just overwrote index.html with its redirect
+      #    page, so re-run the entrypoint (minus its final exec) — it re-downloads
+      #    the nookbag bundle, rewrites ui-config.yml and the www symlink.
       sed "/^exec python3 -m http.server/d" /usr/local/bin/entrypoint.sh > /tmp/rerender.sh
       cd / && bash /tmp/rerender.sh >/tmp/rerender.log 2>&1 || { tail -25 /tmp/rerender.log; exit 1; }
       test -f /showroom/www/index.html && grep -q "assets/index-" /showroom/www/index.html || { echo "UI shell missing after render"; exit 1; }
