@@ -135,8 +135,9 @@ The provisioner copies the Module 6 supply-chain substrate into every self-servi
 * `factory-hub/seat-quay-push-secret` — dockerconfigjson for the org-local Quay robot
   (`deanpeterson+pipeline`), the same credential every fixed seat holds. Create once:
   `oc get secret quay-push-secret -n user3-agent-workspace -o json | <rename to seat-quay-push-secret, ns factory-hub> | oc apply -f -`
-* `factory-hub/quay-admin-token` (key `token`, optional) — a Quay OAuth token with
-  repo create + permission rights. When present the provisioner pre-creates
-  `deanpeterson/<handle>-order-metrics` and grants the robot admin; when absent it logs
-  a WARN and the first push must be allowed to create the repo (give the robot Creator
-  rights in the org).
+* `factory-hub/quay-admin-token` (keys `token`, `host`) — the `quayadmin` OAuth token,
+  copied from `rhdh-test/rhdh-quay-credentials` (`QUAY_API_TOKEN`, the Dev Hub Quay
+  plugin's token; superuser, admin of org `deanpeterson`). The provisioner pre-creates
+  `deanpeterson/<handle>-order-metrics` (private) and grants `deanpeterson+pipeline`
+  admin. If it is ever absent the provisioner logs a WARN instead of failing:
+  `oc get secret rhdh-quay-credentials -n rhdh-test -o json | <rename to quay-admin-token, key token=QUAY_API_TOKEN, ns factory-hub> | oc apply -f -`
