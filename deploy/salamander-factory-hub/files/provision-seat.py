@@ -292,6 +292,17 @@ try:
     tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace(
         "__PASSWORD__", "the password you chose when you signed up")
     tmpl = tmpl.replace(f"    user: {HANDLE}\n", f"    user: {HANDLE}\n    keycloak_user: {USER}\n")
+    # Showroom renders the guide from userdata at pod start only. Stamp a
+    # hash of the rendered userdata on the pod template so a change rolls
+    # the pod (a bare ConfigMap update leaves the old guide serving).
+    import hashlib, yaml as _yaml
+    docs = [d for d in _yaml.safe_load_all(tmpl) if d]
+    ud = next((d for d in docs if d.get("kind") == "ConfigMap" and d["metadata"]["name"].endswith("-userdata")), None)
+    digest = hashlib.sha256(_yaml.safe_dump(ud["data"], sort_keys=True).encode()).hexdigest()[:16] if ud else "none"
+    for d in docs:
+        if d.get("kind") == "Deployment":
+            d["spec"]["template"].setdefault("metadata", {}).setdefault("annotations", {})["factory-hub.redhat.com/userdata-sha"] = digest
+    tmpl = "\n---\n".join(_yaml.safe_dump(d, default_flow_style=False, sort_keys=False, width=1000) for d in docs)
     S.oc("apply", "-f", "-", input=tmpl)
     subprocess.run(["oc", "rollout", "status", f"deployment/showroom-{HANDLE}", "-n", SNS, "--timeout=480s"], check=True)
 
