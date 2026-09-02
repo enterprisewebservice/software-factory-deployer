@@ -182,6 +182,9 @@ spec:
         # refresh: one sign-in covers a full workshop day.
         - --cookie-expire=12h0m0s
         - --cookie-refresh=0s
+        # Log requests: the only way to tell "the browser never asked" from
+        # "the gate refused" when a pane or the terminal goes blank.
+        - --request-logging=true
         - --openshift-sar={"namespace":"showroom-__USER__","resource":"services","verb":"get"}
         - --skip-provider-button=true
         - --pass-user-headers=true

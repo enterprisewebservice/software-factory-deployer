@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# reload-guide.sh [namespace ...] — re-render the workshop guide IN PLACE in
+# each Showroom pod (default: every showroom-* namespace). The content
+# container serves /showroom/www with a plain http.server, so a fresh
+# antora build there goes live without replacing the pod — the terminal
+# (same pod) stays up. Mirrors the image's entrypoint: pull, re-merge
+# user_data into antora.yml, antora --to-dir. Never `oc rollout restart`
+# a seat someone is working in for a content change.
+set -uo pipefail
+NSS=("$@"); [ ${#NSS[@]} -gt 0 ] || mapfile -t NSS < <(oc get ns -o name | sed 's#namespace/##' | grep -E '^showroom-')
+for ns in "${NSS[@]}"; do
+  pod=$(oc get pods -n "$ns" -o name --field-selector=status.phase=Running 2>/dev/null | head -1)
+  [ -n "$pod" ] || { echo "$ns: no running pod"; continue; }
+  if oc exec -n "$ns" "$pod" -c content -- bash -c '
+      set -e; cd /showroom/repo
+      git checkout -q -- content/antora.yml
+      git pull -q
+      yq -i ".asciidoc.attributes *= load(\"/user_data/user_data.yml\")" content/antora.yml
+      antora --to-dir=/showroom/www site.yml >/tmp/antora.log 2>&1 || { tail -20 /tmp/antora.log; exit 1; }
+      git -C /showroom/repo log -1 --format="  rendered %h %s"' 2>&1 | tail -3; then
+    echo "$ns: guide reloaded in place"
+  else
+    echo "$ns: RELOAD FAILED"
+  fi
+done

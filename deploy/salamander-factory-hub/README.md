@@ -116,3 +116,13 @@ redirect loop, seen live on the first real signup (2026-09-01). Start every logi
 to the protected page itself (`/workshop/agents-as-staff/`, `/hub/mylab.html`); the proxy signs
 the person in and returns them there.
 
+## Reloading the guide without restarting seats
+
+`./reload-guide.sh [namespace ...]` re-renders the workshop guide in place in each
+Showroom pod (all `showroom-*` namespaces by default): it pulls the content repo,
+re-merges the seat's `user_data` into `antora.yml` and runs `antora` into the
+served `/showroom/www`. The pod is not replaced, so the attendee's terminal —
+which lives in the same pod — stays connected. `oc rollout restart` on a seat is
+only for changes to the pod itself (proxy flags, images); every restart kills the
+terminal websocket and shows "Press ↵ to Reconnect".
+
