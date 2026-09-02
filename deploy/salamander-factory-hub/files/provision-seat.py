@@ -294,7 +294,9 @@ try:
     # seat_mode drives the guide's ifeval blocks: a self-service reader
     # only ever sees self-service instructions (no mention of other seat
     # types); instructor seats default to seat_mode=seat in the content.
-    tmpl = tmpl.replace(f"    user: {HANDLE}\n", f"    user: {HANDLE}\n    keycloak_user: {USER}\n    seat_mode: self-service\n")
+    tmpl = tmpl.replace("__KEYCLOAK_USER__", USER).replace("__SEAT_MODE__", "self-service")
+    if "__" in tmpl.split("user_data.yml")[1][:600]:
+        fail("userdata placeholders left unreplaced")
     S.oc("apply", "-f", "-", input=tmpl)
     # Showroom renders the guide from userdata at pod start only, so a
     # ConfigMap-only change would leave the old guide serving. A hash of

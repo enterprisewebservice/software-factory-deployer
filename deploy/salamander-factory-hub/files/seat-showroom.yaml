@@ -42,6 +42,10 @@ metadata:
 data:
   user_data.yml: 'user: __USER__
 
+    keycloak_user: __KEYCLOAK_USER__
+
+    seat_mode: __SEAT_MODE__
+
     password: __PASSWORD__
 
     openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
