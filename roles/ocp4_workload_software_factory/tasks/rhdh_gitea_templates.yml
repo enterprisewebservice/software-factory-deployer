@@ -104,6 +104,18 @@
     regexp: "^      if: .*'true' if .*else 'false'.*$"
     replace: "      if: ${{ '{{' }} true {{ '}}' }}"
 
+- name: rhdh gitea templates | mirror takes its own entity name
+  # The reference registration (GitHub direct, loaded straight from the
+  # branch) is `openclaw-agent-create`. Two Locations serving one entity
+  # name make the catalog keep only one — and it kept the GitHub copy,
+  # so the attendee template silently vanished (2026-09-02). The mirror
+  # is `openclaw-agent-genesis`: the name the guide-era registration
+  # used and the app-config fragment's path already carries.
+  ansible.builtin.replace:
+    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
+    regexp: "^  name: openclaw-agent-create$"
+    replace: "  name: openclaw-agent-genesis"
+
 - name: rhdh gitea templates | mirror takes the plain attendee-facing title
   ansible.builtin.replace:
     path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"
@@ -115,6 +127,13 @@
     argv: [grep, -c, "default: '{{ gitea_host }}'", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"]
   register: r_rewrite_check
   failed_when: r_rewrite_check.stdout != "1"
+  changed_when: false
+
+- name: rhdh gitea templates | verify the mirror carries its own entity name
+  ansible.builtin.command:
+    argv: [grep, -c, "^  name: openclaw-agent-genesis$", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"]
+  register: r_name_check
+  failed_when: r_name_check.stdout != "1"
   changed_when: false
 
 - name: rhdh gitea templates | verify gitProvider still ships as auto
