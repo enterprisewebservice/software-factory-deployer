@@ -64,7 +64,8 @@
     repo: "{{ rhdh_golden_path_template_repo }}"
     dest: "{{ r_tpl_dir.path }}/src"
     version: "{{ rhdh_golden_path_template_revision }}"
-    depth: 1
+    # Full clone: Gitea rejects pushes from a shallow clone
+    # ("shallow update not allowed"), which silently froze the mirror.
 
 # The registration-time rewrite — three deltas vs the reference template:
 # giteaHost points at this cluster, gitProvider comes back to 'auto'
