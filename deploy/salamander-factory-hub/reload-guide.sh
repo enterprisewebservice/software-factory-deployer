@@ -19,7 +19,8 @@ for ns in "${NSS[@]}"; do
       git checkout -q -- content/antora.yml
       git pull -q
       yq -i ".asciidoc.attributes *= load(\"/user_data/user_data.yml\")" content/antora.yml
-      antora --to-dir=/showroom/www site.yml >/tmp/antora.log 2>&1 || { tail -20 /tmp/antora.log; exit 1; }
+      # the edition picks its playbook through ANTORA_PLAYBOOK (handsonmode uses its own)
+      antora --to-dir=/showroom/www "${ANTORA_PLAYBOOK:-site.yml}" >/tmp/antora.log 2>&1 || { tail -20 /tmp/antora.log; exit 1; }
       git -C /showroom/repo log -1 --format="  rendered %h %s"' 2>&1 | tail -3; then
     echo "$ns: guide reloaded in place"
   else
