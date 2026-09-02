@@ -9,7 +9,11 @@
 set -uo pipefail
 NSS=("$@"); [ ${#NSS[@]} -gt 0 ] || mapfile -t NSS < <(oc get ns -o name | sed 's#namespace/##' | grep -E '^showroom-')
 for ns in "${NSS[@]}"; do
-  pod=$(oc get pods -n "$ns" -o name --field-selector=status.phase=Running 2>/dev/null | head -1)
+  # the Showroom pod is the one with a `content` container (a namespace may also host a hub/nginx pod)
+  pod=$(oc get pods -n "$ns" -o json --field-selector=status.phase=Running 2>/dev/null | python3 -c '
+import json,sys
+for p in json.load(sys.stdin)["items"]:
+    if any(c["name"]=="content" for c in p["spec"]["containers"]): print("pod/"+p["metadata"]["name"]); break')
   [ -n "$pod" ] || { echo "$ns: no running pod"; continue; }
   if oc exec -n "$ns" "$pod" -c content -- bash -c '
       set -e; cd /showroom/repo
