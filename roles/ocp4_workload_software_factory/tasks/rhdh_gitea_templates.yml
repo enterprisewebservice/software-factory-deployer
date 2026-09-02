@@ -128,12 +128,12 @@
     executable: /bin/bash
     cmd: |
       set -euo pipefail
-    cd "{{ r_tpl_dir.path }}/src"
-    git -c user.name="software-factory-deployer" -c user.email="deployer@{{ gitea_host }}" \
-      commit -am "workshop registration rewrite: giteaHost={{ gitea_host }} (gitProvider stays auto)"
-    git push --force \
-      "https://{{ gitea_admin_user }}:{{ r_gitea_token.json.sha1 }}@{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}.git" \
-      HEAD:refs/heads/main
+      cd "{{ r_tpl_dir.path }}/src"
+      git -c user.name="software-factory-deployer" -c user.email="deployer@{{ gitea_host }}" \
+        commit -am "workshop registration rewrite: giteaHost={{ gitea_host }} (gitProvider stays auto)"
+      git push --force \
+        "https://{{ gitea_admin_user }}:{{ r_gitea_token.json.sha1 }}@{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}.git" \
+        HEAD:refs/heads/main
   no_log: true
 
 - name: rhdh gitea templates | drop the working directory
