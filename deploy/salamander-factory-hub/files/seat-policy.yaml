@@ -74,6 +74,32 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: mm-brid
 subjects:
   - { kind: ServiceAccount, name: mm-bridge, namespace: agent-office }
 ---
+# Module 4 opens with `oc get skills` showing exactly ONE row, and Module 6's
+# build lane needs it: the golden-path-service skill artifact, pinned by
+# digest to the registry (the operator fetches and verifies it; nothing is
+# copied here). The deployer pre-installs the same Skill in the fixed seats.
+apiVersion: agentoffice.ai/v1alpha1
+kind: Skill
+metadata:
+  name: golden-path-service
+  namespace: __HANDLE__-agent-workspace
+  labels:
+    agentoffice.ai/skill-tier: registry
+    app.kubernetes.io/managed-by: agent-office
+  annotations:
+    agentoffice.ai/pack-ref: agent-office/golden-path-service:1.0.5
+    agentoffice.ai/registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+spec:
+  displayName: Golden Path Service
+  description: Scaffold and structure services for the ACME platform golden path. Use whenever building, scaffolding, restructuring, or fixing a service repository (microservice, MCP service, API) that the platform supply chain will build and deploy.
+  version: 1.0.5
+  source:
+    packageRef:
+      ref: oci://quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skill-golden-path-service:1.0.5
+      digest: b1a4f42903ad329f86f9325a3cc9f67591ec903787b59557d50506d4dda72c7c
+      pullSecretName: quay-pull-secret
+      insecureSkipTLSVerify: true
+---
 apiVersion: v1
 kind: ResourceQuota
 metadata:

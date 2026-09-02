@@ -84,8 +84,11 @@ rules:
     resources: [applications]
     verbs: [get, list, delete]
   - apiGroups: [agentoffice.ai]
-    resources: [agentworkstations, agentgateways, skills]
+    resources: [agentworkstations, agentgateways]
     verbs: [get, list, delete]
+  - apiGroups: [agentoffice.ai]
+    resources: [skills]
+    verbs: [get, list, create, patch, update, delete]   # seat-policy installs golden-path-service
   - apiGroups: [mcp.kuadrant.io, gateway.networking.k8s.io, pipelinesascode.tekton.dev, tekton.dev]
     resources: [mcpserverregistrations, httproutes, repositories, pipelineruns]
     verbs: [get, list, delete]
