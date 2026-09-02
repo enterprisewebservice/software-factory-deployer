@@ -289,6 +289,16 @@ try:
             code, _ = http("POST", f"{MM}/users", {"email": EMAIL, "username": HANDLE, "password": PW}, headers=hdr)
             if code not in (201,):
                 print(f"mattermost user create -> {code} (continuing; chat login may need admin help)")
+    # Team membership: the workshop team is invite-only, and a sign-in
+    # before the first hire otherwise lands on Mattermost's "no teams"
+    # page. The operator adds the person to their agents' PRIVATE channels
+    # at hire time; the team itself is joined here. Idempotent.
+    mm_code, mm_user = http("GET", f"{MM}/users/username/{HANDLE}", headers=hdr)
+    t_code, team = http("GET", f"{MM}/teams/name/{os.environ.get('MM_TEAM', 'agents')}", headers=hdr)
+    if mm_code == 200 and t_code == 200:
+        print("  team membership:", http("POST", f"{MM}/teams/{team['id']}/members", {"team_id": team["id"], "user_id": mm_user["id"]}, headers=hdr)[0])
+    else:
+        print(f"  team membership skipped (user {mm_code}, team {t_code})")
 
     step("seat showroom")
     # Cookie secret for the seat's own oauth-proxy (kept across repairs).
