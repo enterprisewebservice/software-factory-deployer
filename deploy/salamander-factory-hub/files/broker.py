@@ -160,9 +160,17 @@ class H(BaseHTTPRequestHandler):
                 return self.send(403, {"error": "admins only"})
             all_seats = seats()
             rows = [{"handle": h, **{k: v for k, v in rec.items() if k != "handle"},
-                     "job_running": job_active(f"provision-{h}") or job_active(f"reset-{h}")} for h, rec in sorted(all_seats.items())]
+                     "admin": rec.get("username") in ADMINS,
+                     "job_running": job_active(f"provision-{h}") or job_active(f"reset-{h}") or job_active(f"deprovision-{h}")} for h, rec in sorted(all_seats.items())]
             return self.send(200, {"seats": rows, "max": MAX_SEATS})
         return self.send(404, {"error": "not found"})
+
+    def body(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            return json.loads(self.rfile.read(n) or b"{}") if n else {}
+        except Exception:
+            return {}
 
     def do_POST(self):
         u = self.user()
@@ -170,6 +178,39 @@ class H(BaseHTTPRequestHandler):
             return self.send(401, {"error": "no identity"})
         all_seats = seats()
         parts = [p for p in self.path.split("?")[0].split("/") if p]
+        # /api/admin/remove  {handles:[...] | all:true, purge_login:bool, dry_run:bool}
+        # Wholesale removal: every selected seat is deprovisioned (one Job
+        # each, in parallel); with purge_login the person's sign-in
+        # (Keycloak account + OpenShift User/Identity) goes too, so the
+        # platform is clean for the next workshop. Admin seats are never
+        # removed this way; seats with a running job are skipped.
+        if parts == ["api", "admin", "remove"]:
+            if u not in ADMINS:
+                return self.send(403, {"error": "admins only"})
+            req = self.body()
+            wanted = sorted(all_seats) if req.get("all") else [h for h in (req.get("handles") or []) if isinstance(h, str)]
+            purge = bool(req.get("purge_login"))
+            dry = bool(req.get("dry_run"))
+            started, skipped = [], {}
+            for h in wanted:
+                rec = all_seats.get(h)
+                if not rec:
+                    skipped[h] = "no such seat"; continue
+                if rec.get("username") in ADMINS:
+                    skipped[h] = "admin seat — remove it individually"; continue
+                if job_active(f"provision-{h}") or job_active(f"reset-{h}") or job_active(f"deprovision-{h}"):
+                    skipped[h] = "a job is still running for this seat"; continue
+                if dry:
+                    started.append(h); continue
+                write_seat(h, dict(rec, phase="removing"))
+                env = {"SEAT_HANDLE": h, "SEAT_USER": rec.get("username", "")}
+                if purge:
+                    env["PURGE_LOGIN"] = "1"
+                if run_job(f"deprovision-{h}", ["python3", "/scripts/deprovision-seat.py"], env):
+                    started.append(h)
+                else:
+                    skipped[h] = "could not start the removal job"
+            return self.send(200, {"started": started, "skipped": skipped, "purge_login": purge, "dry_run": dry})
         # /api/seat/provision | /api/seat/reset
         if parts[:2] == ["api", "seat"] and len(parts) == 3:
             h, rec = S.seat_for(u, all_seats)

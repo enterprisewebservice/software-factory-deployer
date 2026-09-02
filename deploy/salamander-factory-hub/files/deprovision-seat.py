@@ -6,7 +6,9 @@ the seat's namespaces, cluster bindings, ApplicationSet generators,
 ArgoCD RBAC rows, Gitea org + user, Mattermost account, group
 memberships, the seat Secret and the seats-record. The OpenShift User
 and its Keycloak account are kept — the person can come back and get a
-fresh seat.
+fresh seat. With PURGE_LOGIN=1 (the admin page's wholesale removal) the
+sign-in goes too: the Keycloak account and the OpenShift User +
+Identity, so nothing of the person remains on the platform.
 """
 import base64, json, os, subprocess, sys, urllib.request, urllib.error, io, tarfile
 sys.path.insert(0, "/scripts")
@@ -23,7 +25,8 @@ if subprocess.run(["which", "oc"], capture_output=True).returncode != 0:
 rec = S.read_seats().get(H) or {}
 USER = rec.get("username") or os.environ.get("SEAT_USER", "")
 NS, SNS, ORG = f"{H}-agent-workspace", f"showroom-{H}", f"{H}-agents"
-print(f"deprovision {H} (user={USER})", flush=True)
+PURGE = os.environ.get("PURGE_LOGIN") == "1"
+print(f"deprovision {H} (user={USER}, purge_login={PURGE})", flush=True)
 
 
 def http(method, url, headers=None, auth=None):
@@ -117,6 +120,8 @@ try:
         print("  removed from attendees:", http("DELETE", f"{KCR}/users/{users[0]['id']}/groups/{groups[0]['id']}", headers=khdr))
     else:
         print("  no keycloak account / group")
+    if PURGE and users:
+        print("  keycloak account deleted:", http("DELETE", f"{KCR}/users/{users[0]['id']}", headers=khdr))
 except Exception as e:
     print("  keycloak step skipped:", str(e)[:80])
 
@@ -127,5 +132,11 @@ if USER:
     print("  workshop group:", S.oc("adm", "groups", "remove-users", "redhat-workshop-users", USER, check=False).strip() or "removed")
     print("  per-user group:", S.oc("delete", "group", USER, "--ignore-not-found", check=False).strip() or "(no output)")
 S.oc("delete", "secret", f"seat-{H}", "-n", S.HUB_NS, "--ignore-not-found")
+if PURGE and USER:
+    print("== openshift user + identity (purge) ==", flush=True)
+    idents = S.oc("get", "identity", "-o", "jsonpath={range .items[?(@.user.name=='" + USER + "')]}{.metadata.name}{'\n'}{end}", check=False).split()
+    for ident in idents:
+        print("  identity:", ident, S.oc("delete", "identity", ident, "--ignore-not-found", check=False).strip())
+    print("  user:", S.oc("delete", "user", USER, "--ignore-not-found", check=False).strip())
 S.oc("patch", "cm", S.SEATS_CM, "-n", S.HUB_NS, "--type=json", "-p", json.dumps([{"op": "remove", "path": f"/data/{H}"}]), check=False)
 print(f"SEAT REMOVED: {H}", flush=True)

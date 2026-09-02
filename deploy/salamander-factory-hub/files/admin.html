@@ -20,6 +20,11 @@
   code { font-family:"Red Hat Mono",monospace; background:#f2f2f2; border:1px solid var(--line); border-radius:4px; padding:0.1rem 0.4rem; }
   .pill { font-size:0.72rem; font-weight:700; padding:0.12rem 0.55rem; border-radius:999px; } .ready { background:#e7f7ed; color:#1a7f37; } .provisioning, .resetting { background:#fdf1e2; color:#b25e09; } .error { background:#fdecea; color:#b3261e; }
   .muted { color:var(--muted); font-size:0.85rem; }
+  .removing { background:#fdecea; color:#b3261e; }
+  .bulk { margin-top:1.2rem; display:flex; flex-wrap:wrap; align-items:center; gap:0.8rem; background:#fff; border:1px solid var(--line); border-radius:8px; padding:0.7rem 1rem; }
+  .bulk label { font-size:0.88rem; display:flex; align-items:center; gap:0.4rem; }
+  .bulk .note { color:var(--muted); font-size:0.82rem; }
+  td.sel, th.sel { width:2rem; text-align:center; }
 </style>
 </head>
 <body>
@@ -29,23 +34,53 @@
 </div></nav>
 <main>
   <h1>Seats</h1><div class="sub" id="sub">Every workbench provisioned through the hub. Reset returns a seat to Module 1; re-provision repairs a broken one.</div>
+  <div class="bulk">
+    <button class="btn" id="removeSel" disabled>Remove selected</button>
+    <button class="btn dark" id="removeAll">Remove all attendees</button>
+    <label><input type="checkbox" id="purge" checked> also delete their sign-in accounts (Keycloak + OpenShift user)</label>
+    <span class="note">Wholesale removal: namespaces, agents, git org, chat account, seat record. Admin seats are never included.</span>
+  </div>
   <div id="out"></div>
 </main>
 <script>
 const out = document.getElementById('out');
-async function api(p, m='GET'){ const r = await fetch(p,{method:m,credentials:'include',headers:{'Accept':'application/json'}}); return {ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}; }
+async function api(p, m='GET', body){ const r = await fetch(p,{method:m,credentials:'include',headers:{'Accept':'application/json','Content-Type':'application/json'},body: body?JSON.stringify(body):undefined}); return {ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}; }
+const selected = new Set();
+function syncBulk(){ const b=document.getElementById('removeSel'); b.disabled = selected.size===0; b.textContent = selected.size ? 'Remove selected ('+selected.size+')' : 'Remove selected'; }
+async function bulkRemove(spec, label){
+  const purge = document.getElementById('purge').checked;
+  const plan = await api('/api/admin/remove','POST',{...spec, purge_login:purge, dry_run:true});
+  if (!plan.ok) { alert('Could not plan the removal: HTTP '+plan.status); return; }
+  const n = plan.data.started.length, skipped = Object.entries(plan.data.skipped||{});
+  if (!n) { alert('Nothing to remove.' + (skipped.length ? '\nSkipped: '+skipped.map(([h,r])=>h+' ('+r+')').join(', ') : '')); return; }
+  const typed = prompt(label+': '+n+' seat(s) will be removed entirely' + (purge ? ', INCLUDING their sign-in accounts' : '') + ' — ' + plan.data.started.join(', ') + (skipped.length ? '\nSkipped: '+skipped.map(([h,r])=>h+' ('+r+')').join(', ') : '') + '\n\nType REMOVE to confirm.');
+  if (typed !== 'REMOVE') return;
+  const r = await api('/api/admin/remove','POST',{...spec, purge_login:purge});
+  if (!r.ok) alert('Removal failed to start: HTTP '+r.status);
+  selected.clear(); syncBulk(); render();
+}
+document.getElementById('removeSel').onclick = () => bulkRemove({handles:[...selected]}, 'Remove selected');
+document.getElementById('removeAll').onclick = () => bulkRemove({all:true}, 'Remove all attendees');
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 async function render(){
   const {ok,status,data} = await api('/api/admin/seats');
   if (!ok) { out.innerHTML = '<p class="muted" style="margin-top:1rem">' + (status===403 ? 'Admins only.' : 'Could not load seats.') + '</p>'; return; }
   document.getElementById('sub').textContent = data.seats.length + ' of ' + data.max + ' workbenches in use.';
-  out.innerHTML = '<table><tr><th>Handle</th><th>User</th><th>Email</th><th>Phase</th><th>Ready since</th><th>Last reset</th><th></th></tr>' + data.seats.map(s =>
-    '<tr><td><code>'+esc(s.handle)+'</code></td><td>'+esc(s.username)+'</td><td class="muted">'+esc(s.email||'')+'</td>'
+  for (const h of [...selected]) if (!data.seats.some(s => s.handle===h && !s.admin && !s.job_running)) selected.delete(h);
+  out.innerHTML = '<table><tr><th class="sel"><input type="checkbox" id="selAll" title="Select every attendee seat"></th><th>Handle</th><th>User</th><th>Email</th><th>Phase</th><th>Ready since</th><th>Last reset</th><th></th></tr>' + data.seats.map(s =>
+    '<tr><td class="sel">'+(s.admin||s.job_running ? '' : '<input type="checkbox" data-sel="'+esc(s.handle)+'" '+(selected.has(s.handle)?'checked':'')+'>')+'</td>'
+    + '<td><code>'+esc(s.handle)+'</code>'+(s.admin?' <span class="muted">admin</span>':'')+'</td><td>'+esc(s.username)+'</td><td class="muted">'+esc(s.email||'')+'</td>'
     + '<td><span class="pill '+esc(s.phase)+'">'+esc(s.phase)+(s.step&&s.phase!=='ready'?' · '+esc(s.step):'')+'</span></td>'
     + '<td class="muted">'+esc((s.ready||'').replace('T',' ').slice(0,16))+'</td><td class="muted">'+esc((s.last_reset||'').replace('T',' ').slice(0,16))+'</td>'
     + '<td style="white-space:nowrap"><button class="btn dark" data-a="reset" data-h="'+esc(s.handle)+'" '+(s.phase==='ready'||s.phase==='error'?'':'disabled')+'>Reset</button> '
     + '<button class="btn" data-a="provision" data-h="'+esc(s.handle)+'" '+(s.job_running?'disabled':'')+'>Re-provision</button> '
     + '<button class="btn" style="background:#6a6e73" data-a="deprovision" data-h="'+esc(s.handle)+'" '+(s.job_running?'disabled':'')+'>Remove</button></td></tr>').join('') + '</table>';
+  out.querySelectorAll('input[data-sel]').forEach(c => c.onchange = () => { c.checked ? selected.add(c.dataset.sel) : selected.delete(c.dataset.sel); syncBulk(); });
+  const selAll = document.getElementById('selAll');
+  const selectable = data.seats.filter(s => !s.admin && !s.job_running).map(s => s.handle);
+  selAll.checked = selectable.length>0 && selectable.every(h => selected.has(h));
+  selAll.onchange = () => { selectable.forEach(h => selAll.checked ? selected.add(h) : selected.delete(h)); syncBulk(); render(); };
+  syncBulk();
   out.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
     if (b.dataset.a==='reset' && !confirm('Reset seat '+b.dataset.h+'? All its agents, repos and catalog entries are deleted.')) return;
     if (b.dataset.a==='deprovision' && !confirm('REMOVE seat '+b.dataset.h+' entirely (namespaces, git org, chat account)? The person keeps their login and can claim a fresh seat.')) return;
