@@ -13,6 +13,9 @@ for ns in "${NSS[@]}"; do
   [ -n "$pod" ] || { echo "$ns: no running pod"; continue; }
   if oc exec -n "$ns" "$pod" -c content -- bash -c '
       set -e; cd /showroom/repo
+      # the clone is owned by the build-time user; the container runs as an
+      # arbitrary uid, so git needs the safe.directory override per call
+      export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="*"
       git checkout -q -- content/antora.yml
       git pull -q
       yq -i ".asciidoc.attributes *= load(\"/user_data/user_data.yml\")" content/antora.yml
