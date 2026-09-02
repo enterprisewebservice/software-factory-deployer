@@ -40,7 +40,7 @@
   <a class="logo" href="/"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory</span></a>
   <span class="spacer"></span><span class="who" id="who"></span>
   <a class="btn ghost" id="adminLink" href="/hub/admin.html" hidden>Admin</a>
-  <a class="btn ghost" href="/oauth/sign_out?rd=%2F">Sign out</a>
+  <a class="btn ghost" href="/oauth/sign_out" onclick="switchUser(event)">Sign out / switch user</a>
 </div></nav>
 <main>
   <h1>Your workbench</h1>
@@ -97,6 +97,34 @@ async function render() {
   document.getElementById('reset').onclick = async () => { if (!confirm('Restart the workshop? Everything your workbench created will be deleted.')) return; await api('/api/seat/reset','POST'); render(); };
 }
 render();
+</script>
+<script>
+// Sign out everywhere, so the next sign-in can be a different person.
+// Three sessions are involved and the hub's own sign-out only ends the
+// first: (1) the hub cookie, (2) the OpenShift OAuth server session,
+// (3) the Keycloak SSO session that quietly re-signs the same user in.
+// (2) is ended by a top-level POST to the OAuth server's /logout in a
+// small popup (a first-party page, so its cleared cookie is honoured),
+// which is closed again; (3) by Keycloak's RP-initiated logout, which
+// asks the person to confirm and then returns to the front door.
+function switchUser(ev){
+  if (ev) ev.preventDefault();
+  const apps = location.host.split('.').slice(1).join('.');
+  const keycloak = 'https://auth.runtab.io/realms/factory/protocol/openid-connect/logout?client_id=factory-hub&post_logout_redirect_uri='
+    + encodeURIComponent(location.origin + '/?switched=1');
+  let pop = null;
+  try {
+    pop = window.open('', 'ocp-logout', 'width=420,height=200');
+    if (pop) {
+      const f = pop.document.createElement('form');
+      f.method = 'POST'; f.action = 'https://oauth-openshift.' + apps + '/logout?then=/';
+      pop.document.body.appendChild(f); f.submit();
+      setTimeout(() => { try { pop.close(); } catch (_) {} }, 1500);
+    }
+  } catch (_) {}
+  fetch('/oauth/sign_out', {credentials:'include', redirect:'manual'}).catch(() => {})
+    .finally(() => setTimeout(() => { location.href = keycloak; }, pop ? 1600 : 0));
+}
 </script>
 </body>
 </html>
