@@ -188,6 +188,13 @@ try:
     # the env list with namespaces carrying agentoffice.ai/managed=true
     # and restarts itself when the set changes). Reversible by unlabeling.
     S.oc("label", "ns", NS, "agentoffice.ai/managed=true", "--overwrite")
+    # Chat provisioning: the operator creates an agent's Mattermost user +
+    # private channel (and invites the seat owner) only for namespaces
+    # carrying this label — it is what lets a tenant namespace use the
+    # central Mattermost admin token without holding it. The deployer
+    # labels the fixed seats; without it a hire ran fine but had no chat
+    # presence at all (research seat, 2026-09-02).
+    S.oc("label", "ns", NS, "agentoffice.ai/chat-provisioning=enabled", "--overwrite")
 
     step("gitea user + org")
     g = secret_data("gitea-admin-credentials", "gitea")
