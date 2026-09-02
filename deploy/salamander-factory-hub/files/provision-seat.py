@@ -98,6 +98,7 @@ try:
 
     step("email from keycloak")
     EMAIL = f"{HANDLE}@workshop.invalid"
+    KC_SUB = ""  # the Keycloak user id (OIDC subject): Gitea's direct OAuth2 match key
     KC_TOK, KC_UID = "", ""
     try:
         kc = secret_data("keycloak-admin", "claude-code-agent")
@@ -110,6 +111,7 @@ try:
             KC_UID = users[0]["id"]
             if users[0].get("email"):
                 EMAIL = users[0]["email"]
+                KC_SUB = users[0].get("id", "")
     except Exception as e:
         print("keycloak lookup skipped:", str(e)[:120])
     print("email:", EMAIL)
@@ -196,12 +198,24 @@ try:
     # and Gitea's ACCOUNT_LINKING=auto binds that login to this account.
     code, gu = http("GET", f"{G}/users/{HANDLE}", auth=auth)
     if code != 200:
+        # login_name is the Keycloak SUBJECT, not the username: on an OAuth2
+        # sign-in Gitea first looks for a user whose login_name equals the
+        # provider's user id (the OIDC sub) on this source — a direct match
+        # that needs no account-linking or auto-registration at all. With
+        # the username there instead, the sign-in fell through to Gitea's
+        # "link your account" page and a password nobody has (2026-09-02).
         body = {"username": HANDLE, "email": EMAIL, "must_change_password": False, "visibility": "public",
-                "source_id": int(os.environ.get("GITEA_KEYCLOAK_SOURCE_ID", "1")), "login_name": USER,
+                "source_id": int(os.environ.get("GITEA_KEYCLOAK_SOURCE_ID", "1")), "login_name": KC_SUB or USER,
                 "password": PW}
         code, gu = http("POST", f"{G}/admin/users", body, auth=auth)
         if code not in (201,):
             fail(f"gitea user create -> {code}")
+    else:
+        # Re-provision / re-signup: the Keycloak account may be new (fresh
+        # subject) — keep the direct match current.
+        if KC_SUB and (gu or {}).get("login_name") != KC_SUB:
+            print("  login_name -> keycloak subject:", http("PATCH", f"{G}/admin/users/{HANDLE}",
+                  {"login_name": KC_SUB, "source_id": int(os.environ.get("GITEA_KEYCLOAK_SOURCE_ID", "1"))}, auth=auth)[0])
     GITEA_UID = str((gu or {}).get("id", ""))
     if http("GET", f"{G}/orgs/{ORG}", auth=auth)[0] != 200:
         code, _ = http("POST", f"{G}/admin/users/{HANDLE}/orgs", {"username": ORG, "visibility": "public"}, auth=auth)
