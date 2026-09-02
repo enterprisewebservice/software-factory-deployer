@@ -60,6 +60,11 @@ UID) → Mattermost account. Idempotent; re-running repairs a seat.
   entries, hand-applied skills — back to Module 1. Self-service on the workbench page; admins
   from the admin page.
 * **Remove** (`deprovision-seat.py`, admins): everything above, gone; the login stays.
+* **Remove selected / Remove all attendees** (admin page, `POST /api/admin/remove`): wholesale removal — one
+  deprovision Job per seat, in parallel. Admin seats are never included; seats with a running job are skipped.
+  With *also delete their sign-in accounts* (default on) the Job runs with `PURGE_LOGIN=1` and also deletes the
+  Keycloak account and the OpenShift User + Identity, so nothing of the person remains for the next workshop.
+  The page previews the plan (`dry_run`) and requires typing `REMOVE`.
 
 ## Deploy
 
