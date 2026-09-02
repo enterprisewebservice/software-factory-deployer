@@ -166,6 +166,18 @@ try:
     S.oc("label", "ns", SNS, f"factory-hub.redhat.com/seat={HANDLE}", "--overwrite")
     pol = open("/scripts/seat-policy.yaml").read().replace("__HANDLE__", HANDLE).replace("__USERNAME__", USER)
     S.oc("apply", "-f", "-", input=pol)
+    # The agent gateway pulls its runtime image from the internal Quay
+    # with `quay-pull-secret`; the deployer copies that secret into the
+    # fixed seats, so a dynamic seat gets the same copy here. Without it
+    # the gateway pod sits in ImagePullBackOff and the hire never leaves
+    # Pending.
+    src = json.loads(S.oc("get", "secret", "quay-pull-secret", "-n", "agent-office", "-o", "json"))
+    S.oc("apply", "-f", "-", input=json.dumps({
+        "apiVersion": "v1", "kind": "Secret", "type": src["type"],
+        "metadata": {"name": "quay-pull-secret", "namespace": NS,
+                     "labels": {"app.kubernetes.io/managed-by": "factory-hub"}},
+        "data": src["data"],
+    }))
 
     step("operator discovery label")
     # The operator's MANAGED_NAMESPACES env is GitOps-owned (Argo selfHeal
