@@ -736,8 +736,24 @@ spec:
         labels:
           app.kubernetes.io/managed-by: software-factory-deployer
           software-factory.redhat.com/seat: user1
+          # MCP gateway caller identity (agent-office
+          # cluster/github-mcp/gateway/callers-auth-policy.yaml): the seat's
+          # agent presents this token to the front door; Authorino matches it
+          # against `api_key` (same value, second key) and the annotations
+          # say what the seat may call: the shared platform servers plus
+          # anything registered in its own namespace.
+          agentoffice.ai/mcp-gateway-caller: "true"
+          authorino.kuadrant.io/managed-by: authorino
+        annotations:
+          agentoffice.ai/mcp-caller: seat-user1
+          agentoffice.ai/mcp-namespace: user1-agent-workspace
+          agentoffice.ai/mcp-servers: agent-office/gitea,agent-office/ops-metrics,agent-office/golden-path-probe
   data:
     - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user1-gitea-token
+        property: GITEA_TOKEN
+    - secretKey: api_key
       remoteRef:
         key: user1-gitea-token
         property: GITEA_TOKEN
@@ -766,8 +782,24 @@ spec:
         labels:
           app.kubernetes.io/managed-by: software-factory-deployer
           software-factory.redhat.com/seat: user2
+          # MCP gateway caller identity (agent-office
+          # cluster/github-mcp/gateway/callers-auth-policy.yaml): the seat's
+          # agent presents this token to the front door; Authorino matches it
+          # against `api_key` (same value, second key) and the annotations
+          # say what the seat may call: the shared platform servers plus
+          # anything registered in its own namespace.
+          agentoffice.ai/mcp-gateway-caller: "true"
+          authorino.kuadrant.io/managed-by: authorino
+        annotations:
+          agentoffice.ai/mcp-caller: seat-user2
+          agentoffice.ai/mcp-namespace: user2-agent-workspace
+          agentoffice.ai/mcp-servers: agent-office/gitea,agent-office/ops-metrics,agent-office/golden-path-probe
   data:
     - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user2-gitea-token
+        property: GITEA_TOKEN
+    - secretKey: api_key
       remoteRef:
         key: user2-gitea-token
         property: GITEA_TOKEN
@@ -796,8 +828,24 @@ spec:
         labels:
           app.kubernetes.io/managed-by: software-factory-deployer
           software-factory.redhat.com/seat: user3
+          # MCP gateway caller identity (agent-office
+          # cluster/github-mcp/gateway/callers-auth-policy.yaml): the seat's
+          # agent presents this token to the front door; Authorino matches it
+          # against `api_key` (same value, second key) and the annotations
+          # say what the seat may call: the shared platform servers plus
+          # anything registered in its own namespace.
+          agentoffice.ai/mcp-gateway-caller: "true"
+          authorino.kuadrant.io/managed-by: authorino
+        annotations:
+          agentoffice.ai/mcp-caller: seat-user3
+          agentoffice.ai/mcp-namespace: user3-agent-workspace
+          agentoffice.ai/mcp-servers: agent-office/gitea,agent-office/ops-metrics,agent-office/golden-path-probe
   data:
     - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user3-gitea-token
+        property: GITEA_TOKEN
+    - secretKey: api_key
       remoteRef:
         key: user3-gitea-token
         property: GITEA_TOKEN
@@ -826,8 +874,24 @@ spec:
         labels:
           app.kubernetes.io/managed-by: software-factory-deployer
           software-factory.redhat.com/seat: user4
+          # MCP gateway caller identity (agent-office
+          # cluster/github-mcp/gateway/callers-auth-policy.yaml): the seat's
+          # agent presents this token to the front door; Authorino matches it
+          # against `api_key` (same value, second key) and the annotations
+          # say what the seat may call: the shared platform servers plus
+          # anything registered in its own namespace.
+          agentoffice.ai/mcp-gateway-caller: "true"
+          authorino.kuadrant.io/managed-by: authorino
+        annotations:
+          agentoffice.ai/mcp-caller: seat-user4
+          agentoffice.ai/mcp-namespace: user4-agent-workspace
+          agentoffice.ai/mcp-servers: agent-office/gitea,agent-office/ops-metrics,agent-office/golden-path-probe
   data:
     - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user4-gitea-token
+        property: GITEA_TOKEN
+    - secretKey: api_key
       remoteRef:
         key: user4-gitea-token
         property: GITEA_TOKEN
@@ -856,8 +920,24 @@ spec:
         labels:
           app.kubernetes.io/managed-by: software-factory-deployer
           software-factory.redhat.com/seat: user5
+          # MCP gateway caller identity (agent-office
+          # cluster/github-mcp/gateway/callers-auth-policy.yaml): the seat's
+          # agent presents this token to the front door; Authorino matches it
+          # against `api_key` (same value, second key) and the annotations
+          # say what the seat may call: the shared platform servers plus
+          # anything registered in its own namespace.
+          agentoffice.ai/mcp-gateway-caller: "true"
+          authorino.kuadrant.io/managed-by: authorino
+        annotations:
+          agentoffice.ai/mcp-caller: seat-user5
+          agentoffice.ai/mcp-namespace: user5-agent-workspace
+          agentoffice.ai/mcp-servers: agent-office/gitea,agent-office/ops-metrics,agent-office/golden-path-probe
   data:
     - secretKey: GITEA_TOKEN
+      remoteRef:
+        key: user5-gitea-token
+        property: GITEA_TOKEN
+    - secretKey: api_key
       remoteRef:
         key: user5-gitea-token
         property: GITEA_TOKEN

@@ -236,6 +236,18 @@ try:
     # from Vault via the refresher. Dynamic seats mint the token here
     # with the Gitea admin acting as the user (Sudo): scoped, recorded
     # by id in the seat Secret, revoked on Remove. No user password.
+    # The same Secret is the seat's identity at the MCP gateway front door
+    # (agent-office cluster/github-mcp/gateway/callers-auth-policy.yaml):
+    # Authorino matches the agent's bearer token against `api_key` (second
+    # key, same value) and the annotations say what this seat may call —
+    # the shared platform servers plus anything registered in its own
+    # namespace. Applied on create AND on re-provision (older seats).
+    mcp_identity = {
+        "labels": {"agentoffice.ai/mcp-gateway-caller": "true", "authorino.kuadrant.io/managed-by": "authorino"},
+        "annotations": {"agentoffice.ai/mcp-caller": f"seat-{HANDLE}",
+                        "agentoffice.ai/mcp-namespace": NS,
+                        "agentoffice.ai/mcp-servers": "agent-office/gitea,agent-office/ops-metrics,agent-office/golden-path-probe"},
+    }
     have_secret = subprocess.run(["oc", "get", "secret", f"{HANDLE}-gitea-token", "-n", NS], capture_output=True).returncode == 0
     if not have_secret:
         code, tok = http("POST", f"{G}/users/{HANDLE}/tokens",
@@ -252,13 +264,20 @@ try:
                              auth=auth, headers={"Sudo": HANDLE})
         if code != 201:
             fail(f"gitea token mint -> {code}")
+        tok_b64 = base64.b64encode(tok["sha1"].encode()).decode()
         gsec = {"apiVersion": "v1", "kind": "Secret",
                 "metadata": {"name": f"{HANDLE}-gitea-token", "namespace": NS,
-                             "labels": {"app.kubernetes.io/managed-by": "factory-hub", "factory-hub.redhat.com/seat": HANDLE}},
-                "type": "Opaque", "data": {"GITEA_TOKEN": base64.b64encode(tok["sha1"].encode()).decode()}}
+                             "labels": {"app.kubernetes.io/managed-by": "factory-hub", "factory-hub.redhat.com/seat": HANDLE,
+                                        **mcp_identity["labels"]},
+                             "annotations": dict(mcp_identity["annotations"])},
+                "type": "Opaque", "data": {"GITEA_TOKEN": tok_b64, "api_key": tok_b64}}
         S.oc("apply", "-f", "-", input=json.dumps(gsec))
         S.oc("patch", "secret", f"seat-{HANDLE}", "-n", HUB_NS, "--type=merge",
              "-p", json.dumps({"data": {"gitea_token_id": base64.b64encode(str(tok["id"]).encode()).decode()}}))
+    else:
+        cur = json.loads(S.oc("get", "secret", f"{HANDLE}-gitea-token", "-n", NS, "-o", "json"))
+        S.oc("patch", "secret", f"{HANDLE}-gitea-token", "-n", NS, "--type=merge", "-p",
+             json.dumps({"metadata": mcp_identity, "data": {"api_key": cur["data"]["GITEA_TOKEN"]}}))
 
     step("argo applicationset generators")
     for name in ("agent-office-agents-gitea", "seat-services-gitea"):
