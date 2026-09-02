@@ -126,3 +126,17 @@ which lives in the same pod — stays connected. `oc rollout restart` on a seat 
 only for changes to the pod itself (proxy flags, images); every restart kills the
 terminal websocket and shows "Press ↵ to Reconnect".
 
+## Imperative companions (secrets never live in git)
+
+The provisioner copies the Module 6 supply-chain substrate into every self-service seat
+(`pac-gitea-webhook`, org webhook → Pipelines-as-Code, `quay-push-secret` linked to the
+`pipeline` SA, `chains-public-key`). Two inputs are cluster-only:
+
+* `factory-hub/seat-quay-push-secret` — dockerconfigjson for the org-local Quay robot
+  (`deanpeterson+pipeline`), the same credential every fixed seat holds. Create once:
+  `oc get secret quay-push-secret -n user3-agent-workspace -o json | <rename to seat-quay-push-secret, ns factory-hub> | oc apply -f -`
+* `factory-hub/quay-admin-token` (key `token`, optional) — a Quay OAuth token with
+  repo create + permission rights. When present the provisioner pre-creates
+  `deanpeterson/<handle>-order-metrics` and grants the robot admin; when absent it logs
+  a WARN and the first push must be allowed to create the repo (give the robot Creator
+  rights in the org).

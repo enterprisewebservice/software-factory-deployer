@@ -14,7 +14,7 @@ Identity model (service-account terminal, decided 2026-09-01):
     (stored in Secret seat-<handle>, shown on the person's lab page).
 Nothing here touches cluster auth config.
 """
-import io, json, os, secrets, string, subprocess, sys, tarfile, urllib.request, urllib.parse, urllib.error, base64
+import io, json, os, secrets, string, subprocess, sys, tarfile, time, urllib.request, urllib.parse, urllib.error, base64
 sys.path.insert(0, "/scripts")
 import seatlib as S
 
@@ -278,6 +278,82 @@ try:
         cur = json.loads(S.oc("get", "secret", f"{HANDLE}-gitea-token", "-n", NS, "-o", "json"))
         S.oc("patch", "secret", f"{HANDLE}-gitea-token", "-n", NS, "--type=merge", "-p",
              json.dumps({"metadata": mcp_identity, "data": {"api_key": cur["data"]["GITEA_TOKEN"]}}))
+
+    step("supply chain (pipelines-as-code webhook, quay push, chains key)")
+    # Modules 5/6: the platform side the guide says "is already standing".
+    # Fixed seats got this by hand on 2026-08-27 (salamander-workspaces/
+    # manifests.yaml header); self-service seats get it here, idempotently:
+    #   1. Secret pac-gitea-webhook (key `secret`) — the PaC webhook secret the
+    #      attendee's Repository CR references (Module 6, Exercise 3)
+    #   2. org-level Gitea webhook <handle>-agents -> Pipelines-as-Code
+    #      controller (push + pull_request events, json, that secret), so the
+    #      merge event lands on a listening pipeline
+    #   3. Secret quay-push-secret (org-local robot, canonical copy in
+    #      factory-hub/seat-quay-push-secret) LINKED to the `pipeline` SA for
+    #      pull+mount — the link is load-bearing: buildah's push reads registry
+    #      auth from the SA's linked dockercfg secrets
+    #   4. ConfigMap chains-public-key (cosign.pub from
+    #      openshift-pipelines/signing-secrets) for the cosign verify step
+    #   5. Quay repo <org>/<handle>-order-metrics pre-created with the robot as
+    #      admin — only when factory-hub/quay-admin-token (key `token`) exists;
+    #      otherwise a WARN (a push cannot auto-create the repo unless the
+    #      robot holds Creator rights in the org)
+    PAC_URL = f"https://pipelines-as-code-controller-openshift-pipelines.{APPS}"
+    if subprocess.run(["oc", "get", "secret", "pac-gitea-webhook", "-n", NS], capture_output=True).returncode != 0:
+        S.oc("create", "secret", "generic", "pac-gitea-webhook", "-n", NS, f"--from-literal=secret={secrets.token_hex(24)}")
+    hook_secret = secret_data("pac-gitea-webhook", NS)["secret"]
+    code, hooks = http("GET", f"{G}/orgs/{ORG}/hooks", auth=auth)
+    if code != 200:
+        fail(f"gitea org hooks list -> {code}")
+    if not any((h.get("config") or {}).get("url") == PAC_URL for h in (hooks or [])):
+        code, _ = http("POST", f"{G}/orgs/{ORG}/hooks", {
+            "type": "gitea", "active": True, "branch_filter": "*",
+            "config": {"url": PAC_URL, "content_type": "json", "secret": hook_secret},
+            "events": ["push", "pull_request", "pull_request_sync", "pull_request_label", "pull_request_comment",
+                       "pull_request_review", "pull_request_review_request", "pull_request_assign", "pull_request_milestone"]},
+            auth=auth)
+        if code != 201:
+            fail(f"gitea org webhook -> {code}")
+    if subprocess.run(["oc", "get", "secret", "quay-push-secret", "-n", NS], capture_output=True).returncode != 0:
+        src = json.loads(S.oc("get", "secret", "seat-quay-push-secret", "-n", HUB_NS, "-o", "json"))
+        S.oc("apply", "-f", "-", input=json.dumps({
+            "apiVersion": "v1", "kind": "Secret", "type": src["type"],
+            "metadata": {"name": "quay-push-secret", "namespace": NS,
+                         "labels": {"app.kubernetes.io/managed-by": "factory-hub", "factory-hub.redhat.com/seat": HANDLE}},
+            "data": src["data"]}))
+    for _ in range(45):  # OpenShift Pipelines creates the `pipeline` SA shortly after the namespace appears
+        if subprocess.run(["oc", "get", "sa", "pipeline", "-n", NS], capture_output=True).returncode == 0:
+            break
+        time.sleep(2)
+    else:
+        fail("pipeline ServiceAccount never appeared in the workspace (OpenShift Pipelines namespace controller)")
+    S.oc("secrets", "link", "pipeline", "quay-push-secret", "--for=pull,mount", "-n", NS)
+    pub = secret_data("signing-secrets", "openshift-pipelines")["cosign.pub"]
+    S.oc("apply", "-f", "-", input=json.dumps({
+        "apiVersion": "v1", "kind": "ConfigMap",
+        "metadata": {"name": "chains-public-key", "namespace": NS,
+                     "labels": {"app.kubernetes.io/managed-by": "factory-hub", "factory-hub.redhat.com/seat": HANDLE}},
+        "data": {"cosign.pub": pub}}))
+    qcfg = json.loads(secret_data("quay-push-secret", NS)[".dockerconfigjson"])
+    qhost = next(iter(qcfg["auths"]))
+    robot = base64.b64decode(qcfg["auths"][qhost]["auth"]).decode().split(":")[0]
+    qorg, repo = robot.split("+")[0], f"{HANDLE}-order-metrics"
+    if subprocess.run(["oc", "get", "secret", "quay-admin-token", "-n", HUB_NS], capture_output=True).returncode == 0:
+        qh = {"Authorization": "Bearer " + secret_data("quay-admin-token", HUB_NS)["token"]}
+        QAPI = f"https://{qhost}/api/v1"
+        code, _ = http("GET", f"{QAPI}/repository/{qorg}/{repo}", headers=qh)
+        if code == 404:
+            code, _ = http("POST", f"{QAPI}/repository",
+                           {"namespace": qorg, "repository": repo, "visibility": "private",
+                            "description": f"seat {HANDLE}: order-metrics (Module 6)"}, headers=qh)
+            if code not in (200, 201):
+                fail(f"quay repo create -> {code}")
+        code, _ = http("PUT", f"{QAPI}/repository/{qorg}/{repo}/permissions/user/{robot}", {"role": "admin"}, headers=qh)
+        if code != 200:
+            fail(f"quay robot grant -> {code}")
+    else:
+        print(f"  WARN: factory-hub/quay-admin-token absent -> Quay repo {qorg}/{repo} not pre-created; "
+              f"the Module 6 push needs {robot} to hold Creator rights in org {qorg}, or add the token", flush=True)
 
     step("argo applicationset generators")
     for name in ("agent-office-agents-gitea", "seat-services-gitea"):

@@ -1,5 +1,8 @@
 # SUPPLY-CHAIN LANE (module 6, live 2026-08-27) — per-seat substrate applied
 # imperatively alongside this file (fold into manifests at next revision):
+#   (2026-09-02: self-service seats now get all of this from the factory-hub
+#    provisioner, step "supply chain"; the list below still documents the
+#    hand-applied fixed seats user1..5.)
 #   * Secret pac-gitea-webhook (random) per seat ns — PaC webhook secret
 #   * Secret quay-push-secret per seat ns + LINKED to the 'pipeline' SA
 #     (build pushes): `oc secrets link pipeline quay-push-secret
