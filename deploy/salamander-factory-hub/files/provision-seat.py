@@ -298,9 +298,10 @@ try:
     # the rendered userdata on the pod template rolls the pod when it
     # changes (no-op when unchanged). Plain text hashing — no YAML lib.
     import hashlib
-    ud_start = tmpl.find("user_data.yml: |")
-    ud_end = tmpl.find("\n---", ud_start)
-    digest = hashlib.sha256(tmpl[ud_start:ud_end].encode()).hexdigest()[:16]
+    ud_doc = next((d for d in tmpl.split("\n---\n") if f"name: showroom-{HANDLE}-userdata" in d), "")
+    if not ud_doc:
+        fail("userdata ConfigMap not found in the rendered seat template")
+    digest = hashlib.sha256(ud_doc.encode()).hexdigest()[:16]
     S.oc("patch", "deployment", f"showroom-{HANDLE}", "-n", SNS, "--type=merge",
          "-p", json.dumps({"spec": {"template": {"metadata": {"annotations": {"factory-hub.redhat.com/userdata-sha": digest}}}}}))
     subprocess.run(["oc", "rollout", "status", f"deployment/showroom-{HANDLE}", "-n", SNS, "--timeout=480s"], check=True)
