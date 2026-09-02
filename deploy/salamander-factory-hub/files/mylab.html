@@ -51,7 +51,21 @@
 const view = document.getElementById('view');
 const STEPS = ['tooling','seat record','email from keycloak','keycloak attendees group (routes hires to Gitea)','seat password (mattermost + gitea local accounts)','openshift user + groups','workspace namespace + policy','operator discovery label','gitea user + org','gitea seat token (agent gateway)','argo applicationset generators','argo rbac rows','mattermost account','seat showroom','mark ready'];
 let timer = null;
-async function api(path, method='GET') { const r = await fetch(path, {method, credentials:'include', headers:{'Accept':'application/json'}}); return {ok:r.ok, status:r.status, data: await r.json().catch(()=>({}))}; }
+// Session guard: a hub page can be shown from the browser cache after a
+// sign-out, or outlive its session. Then every /api/* call comes back as a
+// login redirect (302 to the OAuth server) instead of JSON, and fetch()
+// rejects. Route that through sign-in once (cache-busting), and show a
+// plain error if the second attempt still fails, instead of spinning forever.
+function goSignIn(reason){
+  const q = new URLSearchParams(location.search);
+  if (q.has('signin')) {
+    document.body.insertAdjacentHTML('afterbegin', '<div class="err" style="margin:1rem;padding:0.8rem;border-left:4px solid #c00">Your session ended and sign-in did not complete (' + String(reason||'error').replace(/[<>&]/g,'') + '). <a href="/">Return to the landing page</a> and sign in again.</div>');
+    return;
+  }
+  location.replace(location.pathname + '?signin=' + Date.now());
+}
+window.addEventListener('unhandledrejection', e => goSignIn(e.reason && e.reason.message));
+async function api(path, method='GET') { const r = await fetch(path, {method, credentials:'include', headers:{'Accept':'application/json'}}); const ct = r.headers.get('content-type') || ''; if (!ct.includes('json')) throw new Error('not signed in (' + r.status + ')'); return {ok:r.ok, status:r.status, data: await r.json().catch(()=>({}))}; }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 async function render() {
   const {ok, data} = await api('/api/seat');

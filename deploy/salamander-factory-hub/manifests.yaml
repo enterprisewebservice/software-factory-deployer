@@ -43,14 +43,17 @@ data:
         root /opt/app-root/src;
 
         # -- public landing -------------------------------------------
-        location = / { try_files /site/landing.html =404; }
+        location = / { add_header Cache-Control "no-store" always; try_files /site/landing.html =404; }
         # Hub assets live under /hub/assets: Showroom's own shell loads
         # ./assets/index-*.js, so /assets/ must proxy to the seat, not us.
         location /hub/assets/ { alias /opt/app-root/src/assets/; }
 
         # -- signed-in hub pages + broker API --------------------------
-        location /hub/ { alias /opt/app-root/src/site/; }
+        # no-store: a cached copy of a signed-in page outlives the session and
+        # spins on "Checking your workbench" instead of going through sign-in.
+        location /hub/ { add_header Cache-Control "no-store" always; alias /opt/app-root/src/site/; }
         location /api/ {
+          add_header Cache-Control "no-store" always;
           proxy_pass http://127.0.0.1:9000;
           proxy_set_header X-Forwarded-User $http_x_forwarded_user;
           proxy_read_timeout 60s;

@@ -44,7 +44,21 @@
 </main>
 <script>
 const out = document.getElementById('out');
-async function api(p, m='GET', body){ const r = await fetch(p,{method:m,credentials:'include',headers:{'Accept':'application/json','Content-Type':'application/json'},body: body?JSON.stringify(body):undefined}); return {ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}; }
+// Session guard: a hub page can be shown from the browser cache after a
+// sign-out, or outlive its session. Then every /api/* call comes back as a
+// login redirect (302 to the OAuth server) instead of JSON, and fetch()
+// rejects. Route that through sign-in once (cache-busting), and show a
+// plain error if the second attempt still fails, instead of spinning forever.
+function goSignIn(reason){
+  const q = new URLSearchParams(location.search);
+  if (q.has('signin')) {
+    document.body.insertAdjacentHTML('afterbegin', '<div class="err" style="margin:1rem;padding:0.8rem;border-left:4px solid #c00">Your session ended and sign-in did not complete (' + String(reason||'error').replace(/[<>&]/g,'') + '). <a href="/">Return to the landing page</a> and sign in again.</div>');
+    return;
+  }
+  location.replace(location.pathname + '?signin=' + Date.now());
+}
+window.addEventListener('unhandledrejection', e => goSignIn(e.reason && e.reason.message));
+async function api(p, m='GET', body){ const r = await fetch(p,{method:m,credentials:'include',headers:{'Accept':'application/json','Content-Type':'application/json'},body: body?JSON.stringify(body):undefined}); const ct = r.headers.get('content-type') || ''; if (!ct.includes('json')) throw new Error('not signed in (' + r.status + ')'); return {ok:r.ok,status:r.status,data:await r.json().catch(()=>({}))}; }
 const selected = new Set();
 function syncBulk(){ const b=document.getElementById('removeSel'); b.disabled = selected.size===0; b.textContent = selected.size ? 'Remove selected ('+selected.size+')' : 'Remove selected'; }
 async function bulkRemove(spec, label){
