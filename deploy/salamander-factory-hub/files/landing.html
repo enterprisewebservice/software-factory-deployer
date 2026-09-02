@@ -210,5 +210,13 @@ function switchUser(ev){
     .finally(() => setTimeout(() => { location.href = keycloak; }, pop ? 3300 : 0));
 }
 </script>
+<script>
+// Sign-in links always carry a fresh query so the browser never serves a
+// cached copy of the workbench page: it must go through the proxy, which
+// sends a signed-out visitor to the login.
+document.querySelectorAll('a[href="/hub/mylab.html"]').forEach(a => a.addEventListener('click', e => {
+  e.preventDefault(); location.href = '/hub/mylab.html?t=' + Date.now();
+}));
+</script>
 </body>
 </html>
