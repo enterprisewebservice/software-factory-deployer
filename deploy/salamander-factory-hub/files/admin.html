@@ -92,9 +92,10 @@ render(); setInterval(render, 8000);
 </script>
 <script>
 // Sign out everywhere, so the next sign-in can be a different person.
-// Three sessions are involved and the hub's own sign-out only ends the
+// Four sessions are involved and the hub's own sign-out only ends the
 // first: (1) the hub cookie, (2) the OpenShift OAuth server session,
-// (3) the Keycloak SSO session that quietly re-signs the same user in.
+// (3) the Keycloak SSO session that quietly re-signs the same user in,
+// (4) the Gitea session that chat signs people in through.
 // (2) is ended by a top-level POST to the OAuth server's /logout in a
 // small popup (a first-party page, so its cleared cookie is honoured),
 // which is closed again; (3) by Keycloak's RP-initiated logout, which
@@ -111,11 +112,15 @@ function switchUser(ev){
       const f = pop.document.createElement('form');
       f.method = 'POST'; f.action = 'https://oauth-openshift.' + apps + '/logout?then=/';
       pop.document.body.appendChild(f); f.submit();
-      setTimeout(() => { try { pop.close(); } catch (_) {} }, 1500);
+      // (4) the Gitea session — chat (Mattermost) signs people in through
+      // Gitea, whose session outlives everything else. Gitea accepts a
+      // GET sign-out, so the same popup visits it next, then closes.
+      setTimeout(() => { try { pop.location = 'https://gitea-gitea.' + apps + '/user/logout'; } catch (_) {} }, 1500);
+      setTimeout(() => { try { pop.close(); } catch (_) {} }, 3200);
     }
   } catch (_) {}
   fetch('/oauth/sign_out', {credentials:'include', redirect:'manual'}).catch(() => {})
-    .finally(() => setTimeout(() => { location.href = keycloak; }, pop ? 1600 : 0));
+    .finally(() => setTimeout(() => { location.href = keycloak; }, pop ? 3300 : 0));
 }
 </script>
 </body>
