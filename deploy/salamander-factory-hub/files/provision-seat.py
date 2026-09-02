@@ -285,7 +285,12 @@ try:
                 "labels": {"app.kubernetes.io/managed-by": "factory-hub"}}, "type": "Opaque",
                 "data": {"cookie-secret": base64.b64encode(secrets.token_urlsafe(32).encode()).decode()}}
         S.oc("apply", "-f", "-", input=json.dumps(psec))
-    tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace("__PASSWORD__", PW)
+    # The guide's {password} attribute: self-service seats never see a
+    # generated password — every surface is their own sign-up login — so
+    # the attribute renders as a reminder sentence wherever it appears.
+    # (Instructor seats keep a real value in their own userdata.)
+    tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace(
+        "__PASSWORD__", "the password you chose when you signed up")
     tmpl = tmpl.replace(f"    user: {HANDLE}\n", f"    user: {HANDLE}\n    keycloak_user: {USER}\n")
     S.oc("apply", "-f", "-", input=tmpl)
     subprocess.run(["oc", "rollout", "status", f"deployment/showroom-{HANDLE}", "-n", SNS, "--timeout=480s"], check=True)
