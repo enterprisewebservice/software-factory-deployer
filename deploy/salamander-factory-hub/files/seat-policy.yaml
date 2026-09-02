@@ -45,6 +45,21 @@ subjects:
   - { kind: ServiceAccount, name: showroom-__HANDLE__, namespace: showroom-__HANDLE__ }
   - { kind: User, apiGroup: rbac.authorization.k8s.io, name: "__USERNAME__" }
 ---
+# The agent gateway mounts its skills as an OCI image volume, which the
+# cluster's SCCs forbid unless the pod's ServiceAccount may `use` the
+# agent-office-imagevol SCC. The fixed workshop seats get this from
+# agent-office/cluster/skills-scc; a dynamic seat gets it here. Without
+# it every hire sits in Pending ("unable to validate against any SCC").
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-office-imagevol-default-sa
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: use-agent-office-imagevol-scc }
+subjects:
+  - { kind: ServiceAccount, name: default, namespace: __HANDLE__-agent-workspace }
+---
 apiVersion: v1
 kind: ResourceQuota
 metadata:
