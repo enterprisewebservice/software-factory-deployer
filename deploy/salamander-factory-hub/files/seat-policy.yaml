@@ -82,11 +82,11 @@ metadata:
   labels: { app.kubernetes.io/managed-by: factory-hub }
 spec:
   hard:
-    pods: "30"
-    requests.cpu: "6"
-    requests.memory: 12Gi
-    limits.cpu: "12"
-    limits.memory: 24Gi
+    pods: "60"
+    requests.cpu: "16"
+    requests.memory: 32Gi
+    limits.cpu: "32"
+    limits.memory: 64Gi
     persistentvolumeclaims: "10"
     requests.storage: 60Gi
 ---
@@ -101,7 +101,9 @@ spec:
     - type: Container
       default: { cpu: "1", memory: 2Gi }
       defaultRequest: { cpu: 100m, memory: 256Mi }
-      max: { cpu: "4", memory: 8Gi }
+      # Sized for the golden-path build (buildah step: 4.6 CPU / 8Gi; the
+      # pod sums its steps to ~6.5 CPU / 16.5Gi) plus the fan-out of scans.
+      max: { cpu: "8", memory: 16Gi }
 ---
 # Seats cannot talk to each other. Allowlist = same namespace + every
 # namespace that is NOT a seat (platform services, ingress, operators).
