@@ -359,10 +359,19 @@ try:
     for name in ("agent-office-agents-gitea", "seat-services-gitea"):
         o = json.loads(S.oc("get", "applicationset", name, "-n", "openshift-gitops", "-o", "json"))
         gens = o["spec"]["generators"]
-        if not any(x.get("scmProvider", {}).get("gitea", {}).get("owner") == ORG for x in gens):
+        mine = [x for x in gens if x.get("scmProvider", {}).get("gitea", {}).get("owner") == ORG]
+        changed = False
+        if not mine:
             t = json.loads(json.dumps(next(x for x in gens if "scmProvider" in x)))
             t["scmProvider"]["gitea"]["owner"] = ORG
-            gens.append(t)
+            gens.append(t); mine = [t]; changed = True
+        # A cloned generator carries the SOURCE seat's values (once sent a
+        # service into user1's namespace). The templates now derive the
+        # namespace from the org, but keep the value truthful anyway.
+        for t in mine:
+            if (t["scmProvider"].get("values") or {}).get("namespace") != NS and "values" in t["scmProvider"]:
+                t["scmProvider"]["values"]["namespace"] = NS; changed = True
+        if changed:
             S.oc("patch", "applicationset", name, "-n", "openshift-gitops", "--type=json",
                  "-p", json.dumps([{"op": "replace", "path": "/spec/generators", "value": gens}]))
 

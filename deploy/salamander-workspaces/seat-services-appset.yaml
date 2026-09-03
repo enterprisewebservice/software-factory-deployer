@@ -8,6 +8,10 @@
 # promotes. Apps are named <org>-<repo> so the seats' ArgoCD RBAC rows
 # (user1-agents-*) cover them.
 #
+# NOTE: self-service seats add their own generator at signup (factory-hub
+# provisioner, step "argo applicationset generators"); do not `oc apply`
+# this file over the live object without merging those in.
+#
 # Milestone B: fold into the deployer's ansible j2 alongside
 # agent-office-appset-gitea.yaml.j2.
 apiVersion: argoproj.io/v1alpha1
@@ -96,7 +100,11 @@ spec:
         path: deploy
       destination:
         server: https://kubernetes.default.svc
-        namespace: '{{ .values.namespace }}'
+        # Derived from the org, NOT from a per-generator value: the
+        # provisioner clones a generator for each self-service seat, and a
+        # cloned `values.namespace` once sent test2's service into user1's
+        # namespace (2026-09-03). Same expression as agent-office-agents-gitea.
+        namespace: '{{ trimSuffix "-agents" .organization }}-agent-workspace'
       syncPolicy:
         automated:
           prune: true
