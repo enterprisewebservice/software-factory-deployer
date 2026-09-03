@@ -229,16 +229,18 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-http01
     route.openshift.io/termination: edge
+    haproxy.router.openshift.io/redirect-to-https: "true"
 spec:
+  ingressClassName: openshift-default
   tls:
     - hosts: [handsonmode.ai, www.handsonmode.ai, handsonmode.com, www.handsonmode.com]
       secretName: handsonmode-tls
   rules:
     - host: handsonmode.ai
-      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { number: 8080 } } } }] }
     - host: www.handsonmode.ai
-      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { number: 8080 } } } }] }
     - host: handsonmode.com
-      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { number: 8080 } } } }] }
     - host: www.handsonmode.com
-      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { number: 8080 } } } }] }
