@@ -462,6 +462,15 @@ try:
     # only ever sees self-service instructions (no mention of other seat
     # types); instructor seats default to seat_mode=seat in the content.
     tmpl = tmpl.replace("__KEYCLOAK_USER__", USER).replace("__SEAT_MODE__", "self-service")
+    # Edition: the front door the person signed up through (recorded on the
+    # seat by the broker; SEAT_BRAND on a direct run). Same workshop repo,
+    # different site file, UI bundle and hub link.
+    BRAND = (os.environ.get("SEAT_BRAND") or rec.get("brand") or "redhat").strip()
+    B = S.BRANDS.get(BRAND) or S.BRANDS["redhat"]
+    rec["brand"] = BRAND if BRAND in S.BRANDS else "redhat"
+    tmpl = (tmpl.replace("__SITE_FILE__", B["site_file"]).replace("__ZT_BUNDLE__", B["zt_bundle"])
+                .replace("__BRAND__", rec["brand"]).replace("__HUB_URL__", B["hub_url"]))
+    print("edition:", rec["brand"], B["site_file"])
     if "__" in tmpl.split("user_data.yml")[1][:600]:
         fail("userdata placeholders left unreplaced")
     S.oc("apply", "-f", "-", input=tmpl)

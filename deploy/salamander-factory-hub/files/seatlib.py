@@ -76,3 +76,28 @@ def links(handle: str) -> dict:
         "mattermost": f"https://mattermost-mattermost.{APPS}/oauth/gitlab/login?redirect_to=%2F",
         "gitea": f"https://gitea-gitea.{APPS}/{handle}-agents",
     }
+
+# Front doors. The hub serves two hostnames; each is an edition of the same
+# workshop repo. brand_for() maps the request host to a brand, BRANDS holds
+# what differs per brand when a seat is rendered.
+BRANDS = {
+    "redhat": {
+        "site_file": "site.yml",
+        "zt_bundle": "https://github.com/rhpds/nookbag/releases/download/nookbag-v0.4.0/nookbag-v0.4.0.zip",
+        "hub_url": "https://factory.apps.salamander.aimlworkbench.com",
+        "title": "Red Hat Software Factory",
+    },
+    "handsonmode": {
+        "site_file": "site-handsonmode.yml",
+        # brand-patched nookbag shipped in the workshop repo (ui-handsonmode/)
+        "zt_bundle": "file:///showroom/repo/ui-handsonmode/nookbag-handsonmode-v0.4.0.zip",
+        "hub_url": "https://handsonmode.ai",
+        "title": "Hands-On Mode",
+    },
+}
+
+
+def brand_for(host: str) -> str:
+    h = (host or "").split(":", 1)[0].lower()
+    return "handsonmode" if h.endswith("handsonmode.ai") or h.endswith("handsonmode.com") else "redhat"
+

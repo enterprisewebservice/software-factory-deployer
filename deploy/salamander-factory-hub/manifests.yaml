@@ -56,6 +56,7 @@ data:
           add_header Cache-Control "no-store" always;
           proxy_pass http://127.0.0.1:9000;
           proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+          proxy_set_header X-Forwarded-Host $host;
           proxy_read_timeout 60s;
         }
 
@@ -63,6 +64,46 @@ data:
         # (guarded there by its own oauth-proxy + SubjectAccessReview).
         # The hub never proxies it: the door just leads to the workbench
         # page, which links to the seat. No Showroom path knowledge here.
+        location ~ ^/workshop/ { return 302 /hub/mylab.html; }
+      }
+
+      # -- second front door: handsonmode.ai ------------------------------
+      # Same hub, same broker, same seats. oauth-proxy passes the request
+      # Host through, so nginx picks this block for the handsonmode.ai
+      # hostnames. The public surfaces (landing, wordmark, favicon, practice
+      # packs) come from the Hands-On Mode library pod — its own repo stays
+      # the single source for that content — while /hub, /api and sign-in
+      # are this hub's. The broker reads X-Forwarded-Host and records the
+      # brand on the seat; the provisioner renders the seat's Showroom with
+      # the Hands-On Mode edition of the same workshop repo.
+      server {
+        listen 8080;
+        server_name handsonmode.ai www.handsonmode.ai handsonmode.com www.handsonmode.com;
+        absolute_redirect off;
+        root /opt/app-root/src;
+
+        location = / {
+          add_header Cache-Control "no-store" always;
+          proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
+          proxy_set_header Host $host;
+        }
+        location = /hub/favicon.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
+        location = /hub/hom-wordmark.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
+        location = /drills { return 302 /drills/ex267/; }
+        location /drills/ {
+          proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
+          proxy_set_header Host $host;
+        }
+
+        location /hub/assets/ { alias /opt/app-root/src/assets/; }
+        location /hub/ { add_header Cache-Control "no-store" always; alias /opt/app-root/src/site/; }
+        location /api/ {
+          add_header Cache-Control "no-store" always;
+          proxy_pass http://127.0.0.1:9000;
+          proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_read_timeout 60s;
+        }
         location ~ ^/workshop/ { return 302 /hub/mylab.html; }
       }
     }
@@ -104,6 +145,9 @@ spec:
             # Browse with no account: the landing and its assets are open.
             - --skip-auth-regex=^/$
             - --skip-auth-regex=^/hub/assets/
+            # handsonmode.ai's public surfaces (library landing assets + practice packs)
+            - --skip-auth-regex=^/hub/(favicon|hom-wordmark)\.svg$
+            - --skip-auth-regex=^/drills(/|$)
             - --skip-provider-button=true
           ports: [{ containerPort: 4180 }]
           volumeMounts:
@@ -145,6 +189,11 @@ metadata:
   namespace: factory-hub
   annotations:
     serviceaccounts.openshift.io/oauth-redirectreference.hub: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"factory-hub"}}'
+    # handsonmode.ai — the same hub behind its own hostnames (Ingress handsonmode-domain below)
+    serviceaccounts.openshift.io/oauth-redirecturi.hom: https://handsonmode.ai/oauth/callback
+    serviceaccounts.openshift.io/oauth-redirecturi.hom-www: https://www.handsonmode.ai/oauth/callback
+    serviceaccounts.openshift.io/oauth-redirecturi.hom-com: https://handsonmode.com/oauth/callback
+    serviceaccounts.openshift.io/oauth-redirecturi.hom-com-www: https://www.handsonmode.com/oauth/callback
 ---
 apiVersion: v1
 kind: Service
@@ -168,3 +217,28 @@ spec:
   to: { kind: Service, name: factory-hub }
   port: { targetPort: http }
   tls: { termination: edge, insecureEdgeTerminationPolicy: Redirect }
+---
+# handsonmode.ai — the second front door. Moved here from the preview
+# edition's namespace: the hub now owns the domain and proxies the
+# library's public pages from that namespace. cert-manager renews it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: handsonmode-domain
+  namespace: factory-hub
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-http01
+    route.openshift.io/termination: edge
+spec:
+  tls:
+    - hosts: [handsonmode.ai, www.handsonmode.ai, handsonmode.com, www.handsonmode.com]
+      secretName: handsonmode-tls
+  rules:
+    - host: handsonmode.ai
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+    - host: www.handsonmode.ai
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+    - host: handsonmode.com
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }
+    - host: www.handsonmode.com
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { name: http } } } }] }

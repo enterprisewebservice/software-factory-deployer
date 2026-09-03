@@ -234,8 +234,12 @@ class H(BaseHTTPRequestHandler):
             if not rec and sum(1 for r in all_seats.values() if r.get("phase") in ("ready", "provisioning")) >= MAX_SEATS:
                 return self.send(429, {"error": f"all {MAX_SEATS} workbenches are taken right now — ask your host to free one"})
             h = h or S.allocate_handle(u, all_seats)
-            write_seat(h, {"username": u, "handle": h, "phase": "provisioning"})
-            ok = run_job(f"provision-{h}", ["python3", "/scripts/provision-seat.py"], {"SEAT_USER": u})
+            # The front door the person came through decides the seat's
+            # edition (Red Hat workshop vs Hands-On Mode). Recorded on the
+            # seat so repairs and resets keep it.
+            brand = (rec or {}).get("brand") or S.brand_for(self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "")
+            write_seat(h, {"username": u, "handle": h, "phase": "provisioning", "brand": brand})
+            ok = run_job(f"provision-{h}", ["python3", "/scripts/provision-seat.py"], {"SEAT_USER": u, "SEAT_BRAND": brand})
             return self.send(202 if ok else 500, {"phase": "provisioning" if ok else "error", "handle": h})
         if action == "reset":
             if not rec or rec.get("phase") not in ("ready", "error"):

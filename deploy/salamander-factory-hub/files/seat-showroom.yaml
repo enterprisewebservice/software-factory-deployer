@@ -46,6 +46,10 @@ data:
 
     seat_mode: __SEAT_MODE__
 
+    brand: __BRAND__
+
+    hub_url: __HUB_URL__
+
     password: __PASSWORD__
 
     openshift_console_url: https://console-openshift-console.apps.salamander.aimlworkbench.com
@@ -151,7 +155,7 @@ spec:
         - name: OUTPUT_DIR
           value: /showroom/www
         - name: ANTORA_SITE_FILE
-          value: site.yml
+          value: __SITE_FILE__
         - name: ANTORA_ENABLE_DEV_MODE
           value: 'false'
         volumeMounts:
@@ -256,9 +260,9 @@ spec:
         - name: GIT_REPO_REF
           value: main
         - name: ANTORA_PLAYBOOK
-          value: site.yml
+          value: __SITE_FILE__
         - name: ZT_BUNDLE
-          value: https://github.com/rhpds/nookbag/releases/download/nookbag-v0.4.0/nookbag-v0.4.0.zip
+          value: __ZT_BUNDLE__
         - name: ZT_UI_ENABLED
           value: 'true'
         - name: SHOWROOM_UI_CONFIG

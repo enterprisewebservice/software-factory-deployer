@@ -145,5 +145,13 @@ function switchUser(ev){
     .finally(() => setTimeout(() => { location.href = keycloak; }, pop ? 3300 : 0));
 }
 </script>
+<script>
+// Second front door: the same pages under handsonmode.ai wear that brand.
+(function(){var h=location.hostname;if(!/handsonmode\.(ai|com)$/.test(h))return;
+document.documentElement.dataset.brand="handsonmode";
+document.title=document.title.replace("Red Hat Software Factory","Hands-On Mode");
+document.querySelectorAll(".logo").forEach(function(e){e.textContent="Hands-On Mode";});
+document.querySelectorAll("*").forEach(function(e){if(e.children.length===0&&/your Red Hat host/.test(e.textContent))e.textContent=e.textContent.replace("your Red Hat host","your host");});})();
+</script>
 </body>
 </html>
