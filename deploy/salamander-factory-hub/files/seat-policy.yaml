@@ -34,17 +34,9 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view }
 subjects:
   - { kind: User, apiGroup: rbac.authorization.k8s.io, name: "__USERNAME__" }
 ---
-# Cluster-scoped reads the workshop needs (Module 7: oc get modelconnections).
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: seat-__HANDLE__-workshop-viewer
-  labels: { app.kubernetes.io/managed-by: factory-hub, factory-hub.redhat.com/seat: __HANDLE__ }
-roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: workshop-viewer }
-subjects:
-  - { kind: ServiceAccount, name: showroom-__HANDLE__, namespace: showroom-__HANDLE__ }
-  - { kind: User, apiGroup: rbac.authorization.k8s.io, name: "__USERNAME__" }
----
+# No cluster-scoped read on ModelConnections: the operator projects the
+# brains this seat may hire on into its workspace as ModelConnectionOffers
+# (Module 7 lists those), and renders no connection the seat was not offered.
 # The agent gateway mounts its skills as an OCI image volume, which the
 # cluster's SCCs forbid unless the pod's ServiceAccount may `use` the
 # agent-office-imagevol SCC. The fixed workshop seats get this from

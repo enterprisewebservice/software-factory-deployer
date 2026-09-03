@@ -114,6 +114,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: user1-agent-workspace
+  # Tenant workspace: the operator projects the brains this principal may
+  # hire on (ModelConnectionOffers) and renders no other (operator >= v1.7.71).
+  annotations:
+    agentoffice.ai/user: user1
+    agentoffice.ai/groups: redhat-workshop-users
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
     agentoffice.ai/chat-provisioning: "enabled"
@@ -170,6 +175,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: user2-agent-workspace
+  # Tenant workspace: the operator projects the brains this principal may
+  # hire on (ModelConnectionOffers) and renders no other (operator >= v1.7.71).
+  annotations:
+    agentoffice.ai/user: user2
+    agentoffice.ai/groups: redhat-workshop-users
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
     agentoffice.ai/chat-provisioning: "enabled"
@@ -226,6 +236,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: user3-agent-workspace
+  # Tenant workspace: the operator projects the brains this principal may
+  # hire on (ModelConnectionOffers) and renders no other (operator >= v1.7.71).
+  annotations:
+    agentoffice.ai/user: user3
+    agentoffice.ai/groups: redhat-workshop-users
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
     agentoffice.ai/chat-provisioning: "enabled"
@@ -282,6 +297,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: user4-agent-workspace
+  # Tenant workspace: the operator projects the brains this principal may
+  # hire on (ModelConnectionOffers) and renders no other (operator >= v1.7.71).
+  annotations:
+    agentoffice.ai/user: user4
+    agentoffice.ai/groups: redhat-workshop-users
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
     agentoffice.ai/chat-provisioning: "enabled"
@@ -338,6 +358,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: user5-agent-workspace
+  # Tenant workspace: the operator projects the brains this principal may
+  # hire on (ModelConnectionOffers) and renders no other (operator >= v1.7.71).
+  annotations:
+    agentoffice.ai/user: user5
+    agentoffice.ai/groups: redhat-workshop-users
   labels:
     argocd.argoproj.io/managed-by: openshift-gitops
     agentoffice.ai/chat-provisioning: "enabled"

@@ -117,6 +117,10 @@ try:
     print("email:", EMAIL)
 
     step("keycloak attendees group (routes hires to Gitea)")
+    # The groups the Developer Hub sees this principal in. They are also
+    # stamped on the workspace namespace (below) so the operator projects
+    # exactly the brains this menu offers — every seat is an attendee.
+    IDP_GROUPS = ["attendees"]
     # The genesis template's gitProvider=auto publishes to Gitea ONLY for
     # users whose catalog entity is memberOf `attendees` (RHDH ingests
     # Keycloak groups); everyone else goes to publish:github into the
@@ -135,8 +139,14 @@ try:
             print("attendees membership:", code)
         else:
             print("attendees group unavailable — hires would route to GitHub!")
+        code, mine = http("GET", f"{KCR}/users/{KC_UID}/groups", headers=hdr)
+        if code == 200 and isinstance(mine, list):
+            for g in mine:
+                if g.get("name") and g["name"] not in IDP_GROUPS:
+                    IDP_GROUPS.append(g["name"])
     else:
         print("no keycloak account for this user (test seat) — skipped")
+    print("identity-provider groups:", IDP_GROUPS)
 
     step("seat password (mattermost + gitea local accounts)")
     try:
@@ -164,6 +174,16 @@ try:
     step("workspace namespace + policy")
     S.oc("create", "ns", NS, check=False)
     S.oc("label", "ns", NS, f"factory-hub.redhat.com/seat={HANDLE}", "--overwrite")
+    # Tenant workspace (operator >= v1.7.71): the principal it acts for and
+    # that principal's identity-provider groups. The operator projects a
+    # ModelConnectionOffer for every published brain whose access list
+    # admits them (the Developer Hub menu, readable with `oc get` in the
+    # workspace) and renders no connection the workspace was not offered.
+    # A namespace admin cannot edit its own Namespace, so a seat cannot
+    # widen its own menu. This replaces the cluster-wide read on
+    # ModelConnections seats used to carry.
+    S.oc("annotate", "ns", NS, f"agentoffice.ai/user={USER}",
+         "agentoffice.ai/groups=" + ",".join(IDP_GROUPS), "--overwrite")
     S.oc("create", "ns", SNS, check=False)
     S.oc("label", "ns", SNS, f"factory-hub.redhat.com/seat={HANDLE}", "--overwrite")
     pol = open("/scripts/seat-policy.yaml").read().replace("__HANDLE__", HANDLE).replace("__USERNAME__", USER)

@@ -31,15 +31,6 @@ metadata:
   namespace: factory-hub
 ---
 # What the workshop terminal (and the person) may read cluster-wide.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: workshop-viewer
-rules:
-  - apiGroups: [agentoffice.ai]
-    resources: [modelconnections]
-    verbs: [get, list, watch]
----
 # The provisioner: explicit, resource-by-resource. Everything a seat is.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
