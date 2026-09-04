@@ -143,7 +143,9 @@ class H(BaseHTTPRequestHandler):
             return {"user": u, "phase": "none", "admin": u in ADMINS}
         out = {"user": u, "handle": h, "phase": rec.get("phase"), "step": rec.get("step"), "detail": rec.get("detail"),
                "started": rec.get("started"), "ready": rec.get("ready"), "last_reset": rec.get("last_reset"),
-               "admin": u in ADMINS, "links": S.links(h)}
+               "admin": u in ADMINS, "links": S.links(h),
+               # edition the seat was rendered for (absent = Red Hat, provisioned before the second door)
+               "brand": rec.get("brand") or "redhat"}
         if rec.get("phase") == "ready":
             out["seat_password"] = seat_password(h)
             out["devhub_ready"] = devhub_ready(u)
