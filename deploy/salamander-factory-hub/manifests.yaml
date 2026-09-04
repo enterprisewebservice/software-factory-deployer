@@ -47,7 +47,7 @@ data:
         # Hub assets live under /hub/assets: Showroom's own shell loads
         # ./assets/index-*.js, so /assets/ must proxy to the seat, not us.
         location /hub/assets/ { alias /opt/app-root/src/assets/; }
-        location = /favicon.ico { default_type image/png; alias /opt/app-root/src/assets/favicon.png; }
+        location = /favicon.ico { types { } default_type image/png; alias /opt/app-root/src/assets/favicon.png; }
 
         # -- signed-in hub pages + broker API --------------------------
         # no-store: a cached copy of a signed-in page outlives the session and
@@ -112,7 +112,16 @@ data:
         }
 
         location /hub/assets/ { alias /opt/app-root/src/assets/; }
-        location /hub/ { add_header Cache-Control "no-store" always; alias /opt/app-root/src/site/; }
+        location /hub/ {
+          add_header Cache-Control "no-store" always;
+          alias /opt/app-root/src/site/;
+          # Safari caches favicons by URL for the whole site: the pages served on
+          # this host must never reference the asset paths that once carried the
+          # Red Hat icon here — rewrite them to the library's icons, new URLs.
+          sub_filter '/hub/assets/favicon.svg' '/hub/favicon.svg?v=hom1';
+          sub_filter '/hub/assets/favicon.png' '/hub/favicon.png?v=hom1';
+          sub_filter_once off;
+        }
         location /api/ {
           add_header Cache-Control "no-store" always;
           proxy_pass http://127.0.0.1:9000;

@@ -33,8 +33,10 @@
   html[data-brand="handsonmode"] { --rh-red:#246BFE; --ink:#13233D; --bg:#f7f9fc; --line:#e4e9f2; }
   html[data-brand="handsonmode"] .btn { background:#246BFE; } html[data-brand="handsonmode"] .btn:hover { background:#1b55d0; }
   html[data-brand="handsonmode"] .btn.dark { background:#13233D; }
-  html[data-brand="handsonmode"] header, html[data-brand="handsonmode"] .top { background:#13233D; }
-  html[data-brand="handsonmode"] .logo img { height:1.35rem; vertical-align:middle; }
+  html[data-brand="handsonmode"] .nav { background:#ffffff; color:#13233D; border-bottom:1px solid #e4e9f2; }
+  html[data-brand="handsonmode"] .nav .who { color:#5a6a85; }
+  html[data-brand="handsonmode"] .btn.ghost { color:#13233D; border-color:#13233D; }
+  html[data-brand="handsonmode"] .logo img { height:1.5rem; vertical-align:middle; display:block; }
 </style>
 </head>
 <body>
@@ -152,7 +154,8 @@ function switchUser(ev){
 (function(){var h=location.hostname;if(!/handsonmode\.(ai|com)$/.test(h))return;
 document.documentElement.dataset.brand="handsonmode";
 document.title=document.title.replace("Red Hat Software Factory","Hands-On Mode");
-document.querySelectorAll('link[rel~="icon"][type="image/svg+xml"]').forEach(function(l){l.href="/hub/favicon.svg";});
+document.querySelectorAll('link[rel~="icon"][type="image/svg+xml"]').forEach(function(l){l.href="/hub/favicon.svg?v=hom1";});
+document.querySelectorAll('link[rel~="icon"][type="image/png"],link[rel="apple-touch-icon"]').forEach(function(l){l.href="/hub/favicon.png?v=hom1";});
 document.querySelectorAll(".logo").forEach(function(e){e.innerHTML='<img src="/hub/hom-wordmark.svg" alt="Hands-On Mode">';});
 document.querySelectorAll("*").forEach(function(e){if(e.children.length===0&&/your Red Hat host/.test(e.textContent))e.textContent=e.textContent.replace("your Red Hat host","your host");});})();
 </script>
