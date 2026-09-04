@@ -81,9 +81,9 @@ async function render(){
   if (!ok) { out.innerHTML = '<p class="muted" style="margin-top:1rem">' + (status===403 ? 'Admins only.' : 'Could not load seats.') + '</p>'; return; }
   document.getElementById('sub').textContent = data.seats.length + ' of ' + data.max + ' workbenches in use.';
   for (const h of [...selected]) if (!data.seats.some(s => s.handle===h && !s.admin && !s.job_running)) selected.delete(h);
-  out.innerHTML = '<table><tr><th class="sel"><input type="checkbox" id="selAll" title="Select every attendee seat"></th><th>Handle</th><th>User</th><th>Email</th><th>Phase</th><th>Ready since</th><th>Last reset</th><th></th></tr>' + data.seats.map(s =>
+  out.innerHTML = '<table><tr><th class="sel"><input type="checkbox" id="selAll" title="Select every attendee seat"></th><th>Handle</th><th>User</th><th>Edition</th><th>Email</th><th>Phase</th><th>Ready since</th><th>Last reset</th><th></th></tr>' + data.seats.map(s =>
     '<tr><td class="sel">'+(s.admin||s.job_running ? '' : '<input type="checkbox" data-sel="'+esc(s.handle)+'" '+(selected.has(s.handle)?'checked':'')+'>')+'</td>'
-    + '<td><code>'+esc(s.handle)+'</code>'+(s.admin?' <span class="muted">admin</span>':'')+'</td><td>'+esc(s.username)+'</td><td class="muted">'+esc(s.email||'')+'</td>'
+    + '<td><code>'+esc(s.handle)+'</code>'+(s.admin?' <span class="muted">admin</span>':'')+'</td><td>'+esc(s.username)+'</td><td>'+esc(s.brand||'redhat')+'</td><td class="muted">'+esc(s.email||'')+'</td>'
     + '<td><span class="pill '+esc(s.phase)+'">'+esc(s.phase)+(s.step&&s.phase!=='ready'?' · '+esc(s.step):'')+'</span></td>'
     + '<td class="muted">'+esc((s.ready||'').replace('T',' ').slice(0,16))+'</td><td class="muted">'+esc((s.last_reset||'').replace('T',' ').slice(0,16))+'</td>'
     + '<td style="white-space:nowrap"><button class="btn dark" data-a="reset" data-h="'+esc(s.handle)+'" '+(s.phase==='ready'||s.phase==='error'?'':'disabled')+'>Reset</button> '
