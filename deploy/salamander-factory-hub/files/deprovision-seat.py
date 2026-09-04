@@ -134,9 +134,10 @@ if USER:
 S.oc("delete", "secret", f"seat-{H}", "-n", S.HUB_NS, "--ignore-not-found")
 if PURGE and USER:
     print("== openshift user + identity (purge) ==", flush=True)
-    # Filter in Python: the jsonpath filter with single-quoted literals
-    # silently matched nothing, so every purge left the person's Identity
-    # objects behind (three orphans after one day of sign-ups, 2026-09-04).
+    # Filter in Python rather than with a jsonpath filter expression: run
+    # from the Job, the jsonpath form returned nothing (it works from a
+    # laptop shell), so every purge left the person's Identity objects
+    # behind — three orphans after one day of sign-ups, 2026-09-04.
     try:
         idents = [i["metadata"]["name"] for i in json.loads(S.oc("get", "identity", "-o", "json", check=False) or '{"items":[]}').get("items", [])
                   if (i.get("user") or {}).get("name") == USER]
