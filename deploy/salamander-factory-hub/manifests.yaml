@@ -89,6 +89,14 @@ data:
         }
         location = /hub/favicon.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
         location = /hub/hom-wordmark.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
+        # The hub pages' static <link rel=icon> fetches this path before any
+        # script runs, and browsers cache favicons by URL: serve the Hands-On
+        # Mode icon at the same path on this host, uncached.
+        location = /hub/assets/favicon.svg {
+          add_header Cache-Control "no-cache" always;
+          proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080/hub/favicon.svg;
+          proxy_set_header Host $host;
+        }
         location = /drills { return 302 /drills/ex267/; }
         location /drills/ {
           proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
