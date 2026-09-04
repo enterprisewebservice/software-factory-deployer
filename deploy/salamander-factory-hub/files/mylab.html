@@ -16,6 +16,9 @@
   .btn { display:inline-block; border:0; border-radius:4px; background:var(--rh-red); color:#fff; padding:0.55rem 1.2rem; font:600 0.9rem "Red Hat Text",sans-serif; cursor:pointer; text-decoration:none; }
   .btn:hover { background:#c00; } .btn.ghost { background:transparent; border:1px solid #5a5a5a; color:#fff; } .btn.dark { background:#151515; } .btn.outline { background:#fff; color:var(--ink); border:1px solid var(--line); }
   .btn[disabled] { opacity:0.5; cursor:default; }
+  /* the hidden attribute must win over .btn's display — the Admin link is
+     hidden until /api/seat says admin:true, for everyone else it stays hidden */
+  [hidden] { display:none !important; }
   main { max-width:960px; margin:0 auto; padding:2rem 1.5rem 3rem; }
   h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.8rem; }
   .sub { color:var(--muted); margin-top:0.3rem; }
@@ -65,6 +68,13 @@ function goSignIn(reason){
   location.replace(location.pathname + '?signin=' + Date.now());
 }
 window.addEventListener('unhandledrejection', e => goSignIn(e.reason && e.reason.message));
+// Editions: the seat is rendered for the front door it was (re-)provisioned
+// from. A seat provisioned before the second door existed has no brand
+// recorded and is the Red Hat edition.
+function doorBrand() { return /handsonmode\.(ai|com)$/.test(location.hostname) ? 'handsonmode' : 'redhat'; }
+function seatBrand(data) { return data.brand || 'redhat'; }
+function editionName(b) { return b === 'handsonmode' ? 'Hands-On Mode' : 'Red Hat'; }
+function editionSwitch(data) { return seatBrand(data) !== doorBrand(); }
 async function api(path, method='GET') { const r = await fetch(path, {method, credentials:'include', headers:{'Accept':'application/json'}}); const ct = r.headers.get('content-type') || ''; if (!ct.includes('json')) throw new Error('not signed in (' + r.status + ')'); return {ok:r.ok, status:r.status, data: await r.json().catch(()=>({}))}; }
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 async function render() {
@@ -107,7 +117,12 @@ async function render() {
     + '<h2 style="margin-top:1.2rem">Your surfaces</h2><div class="grid">'
     + [['Developer Hub','hire and inspect agents',L.devhub],['OpenShift GitOps','watch the rollout',L.gitops],['OpenShift console','your project: '+esc(data.handle)+'-agent-workspace',L.console],['Mattermost','chat with your agent — this link signs you in',L.mattermost],['Gitea','your git organization',L.gitea]].map(([t,s,u])=>'<a class="link" href="'+u+'" target="_blank" rel="noopener"><b>'+t+'</b><span>'+s+'</span></a>').join('')
     + '</div><h2 style="margin-top:1.2rem">Start over</h2><div class="muted">Restart wipes every agent, repository, and catalog entry your workbench created and returns it to a fresh Module 1. Your login and workbench stay.</div>'
-    + '<div class="row"><button class="btn dark" id="reset">Restart workshop</button></div>';
+    + '<div class="row"><button class="btn dark" id="reset">Restart workshop</button>'
+    + (editionSwitch(data) ? ' <button class="btn outline" id="rebuild">Rebuild for the ' + editionName(doorBrand()) + ' edition</button>' : '') + '</div>'
+    + '<div class="muted" style="margin-top:0.5rem">Your seat is rendered as the ' + editionName(seatBrand(data)) + ' edition.'
+    + (editionSwitch(data) ? ' You came in through ' + location.hostname + ': rebuild it to get the ' + editionName(doorBrand()) + ' edition (a couple of minutes; your workspace and repositories are kept).' : '') + '</div>';
+  const rb = document.getElementById('rebuild');
+  if (rb) rb.onclick = async () => { if (!confirm('Rebuild your seat for the ' + editionName(doorBrand()) + ' edition? Your workspace, repositories and agents are kept; the guide and terminal page are re-rendered.')) return; await api('/api/seat/provision','POST'); render(); };
   document.getElementById('reset').onclick = async () => { if (!confirm('Restart the workshop? Everything your workbench created will be deleted.')) return; await api('/api/seat/reset','POST'); render(); };
 }
 render();
