@@ -29,5 +29,6 @@ configMapGenerator:
   - name: factory-hub-assets
     files:
       - favicon.svg=files/favicon.svg
+      - favicon.png=files/favicon.png
 generatorOptions:
   disableNameSuffixHash: true

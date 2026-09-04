@@ -4,6 +4,8 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Seats — Red Hat Software Factory admin</title>
 <link rel="icon" type="image/svg+xml" href="/hub/assets/favicon.svg">
+<link rel="icon" type="image/png" sizes="180x180" href="/hub/assets/favicon.png">
+<link rel="apple-touch-icon" href="/hub/assets/favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400;700&display=swap">
 <style>
   :root { --rh-red:#ee0000; --ink:#151515; --muted:#4d4d4d; --line:#e0e0e0; --bg:#f2f2f2; }
@@ -150,7 +152,7 @@ function switchUser(ev){
 (function(){var h=location.hostname;if(!/handsonmode\.(ai|com)$/.test(h))return;
 document.documentElement.dataset.brand="handsonmode";
 document.title=document.title.replace("Red Hat Software Factory","Hands-On Mode");
-document.querySelectorAll('link[rel~="icon"]').forEach(function(l){l.href="/hub/favicon.svg";});
+document.querySelectorAll('link[rel~="icon"][type="image/svg+xml"]').forEach(function(l){l.href="/hub/favicon.svg";});
 document.querySelectorAll(".logo").forEach(function(e){e.innerHTML='<img src="/hub/hom-wordmark.svg" alt="Hands-On Mode">';});
 document.querySelectorAll("*").forEach(function(e){if(e.children.length===0&&/your Red Hat host/.test(e.textContent))e.textContent=e.textContent.replace("your Red Hat host","your host");});})();
 </script>

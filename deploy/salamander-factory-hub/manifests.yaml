@@ -47,6 +47,7 @@ data:
         # Hub assets live under /hub/assets: Showroom's own shell loads
         # ./assets/index-*.js, so /assets/ must proxy to the seat, not us.
         location /hub/assets/ { alias /opt/app-root/src/assets/; }
+        location = /favicon.ico { default_type image/png; alias /opt/app-root/src/assets/favicon.png; }
 
         # -- signed-in hub pages + broker API --------------------------
         # no-store: a cached copy of a signed-in page outlives the session and
@@ -97,6 +98,13 @@ data:
           proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080/hub/favicon.svg;
           proxy_set_header Host $host;
         }
+        location = /hub/assets/favicon.png {
+          add_header Cache-Control "no-cache" always;
+          proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080/hub/favicon.png;
+          proxy_set_header Host $host;
+        }
+        location = /favicon.ico { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080/favicon.ico; proxy_set_header Host $host; }
+        location = /hub/favicon.png { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
         location = /drills { return 302 /drills/ex267/; }
         location /drills/ {
           proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
@@ -155,6 +163,8 @@ spec:
             - --skip-auth-regex=^/hub/assets/
             # handsonmode.ai's public surfaces (library landing assets + practice packs)
             - --skip-auth-regex=^/hub/(favicon|hom-wordmark)\.svg$
+            - --skip-auth-regex=^/hub/favicon\.png$
+            - --skip-auth-regex=^/favicon\.ico$
             - --skip-auth-regex=^/drills(/|$)
             - --skip-provider-button=true
           ports: [{ containerPort: 4180 }]
