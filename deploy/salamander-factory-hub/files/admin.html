@@ -26,6 +26,13 @@
   .bulk .note { color:var(--muted); font-size:0.82rem; }
   td.sel, th.sel { width:2rem; text-align:center; }
   [hidden] { display:none !important; }
+  /* Hands-On Mode edition of these pages (set by the brand layer from the hostname):
+     the library's palette — blue accent, navy ink, cool grey ground. */
+  html[data-brand="handsonmode"] { --rh-red:#246BFE; --ink:#13233D; --bg:#f7f9fc; --line:#e4e9f2; }
+  html[data-brand="handsonmode"] .btn { background:#246BFE; } html[data-brand="handsonmode"] .btn:hover { background:#1b55d0; }
+  html[data-brand="handsonmode"] .btn.dark { background:#13233D; }
+  html[data-brand="handsonmode"] header, html[data-brand="handsonmode"] .top { background:#13233D; }
+  html[data-brand="handsonmode"] .logo img { height:1.35rem; vertical-align:middle; }
 </style>
 </head>
 <body>
@@ -144,7 +151,7 @@ function switchUser(ev){
 document.documentElement.dataset.brand="handsonmode";
 document.title=document.title.replace("Red Hat Software Factory","Hands-On Mode");
 document.querySelectorAll('link[rel~="icon"]').forEach(function(l){l.href="/hub/favicon.svg";});
-document.querySelectorAll(".logo").forEach(function(e){e.textContent="Hands-On Mode";});
+document.querySelectorAll(".logo").forEach(function(e){e.innerHTML='<img src="/hub/hom-wordmark.svg" alt="Hands-On Mode">';});
 document.querySelectorAll("*").forEach(function(e){if(e.children.length===0&&/your Red Hat host/.test(e.textContent))e.textContent=e.textContent.replace("your Red Hat host","your host");});})();
 </script>
 </body>
