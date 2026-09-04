@@ -128,6 +128,9 @@ terminal websocket and shows "Press ↵ to Reconnect".
 
 ## Imperative companions (secrets never live in git)
 
+- **Keycloak realm `factory`, client `factory-hub`** — Valid redirect URIs / Valid post logout redirect URIs / Web origins include the second front door: `https://handsonmode.ai/*`, `https://www.handsonmode.ai/*`, `https://handsonmode.com/*`, `https://www.handsonmode.com/*` (added 2026-09-03 via the admin API; without them the workbench page's sign-out lands on Keycloak's "Invalid redirect uri"). Re-add if the realm is rebuilt.
+
+
 The provisioner copies the Module 6 supply-chain substrate into every self-service seat
 (`pac-gitea-webhook`, org webhook → Pipelines-as-Code, `quay-push-secret` linked to the
 `pipeline` SA, `chains-public-key`). Two inputs are cluster-only:
