@@ -172,6 +172,21 @@ try:
     S.oc("adm", "groups", "add-users", "redhat-workshop-users", USER)
 
     step("workspace namespace + policy")
+    # A rebuild right after a removal races the old namespaces' deletion:
+    # OpenShift refuses to create anything in a Terminating namespace
+    # ("unable to create new content ... because it is being terminated"),
+    # and `oc create ns` on one is a silent no-op. Wait for them to go
+    # (bounded) before creating; a stuck one is reported, not raced.
+    for ns in (NS, SNS):
+        for i in range(60):
+            phase = S.oc("get", "ns", ns, "-o", "jsonpath={.status.phase}", check=False).strip()
+            if phase != "Terminating":
+                break
+            if i == 0:
+                print(f"namespace {ns} is still terminating from the previous removal — waiting")
+            time.sleep(5)
+        else:
+            raise RuntimeError(f"namespace {ns} has been Terminating for 5 minutes — remove the seat again once it is gone")
     S.oc("create", "ns", NS, check=False)
     S.oc("label", "ns", NS, f"factory-hub.redhat.com/seat={HANDLE}", "--overwrite")
     # Tenant workspace (operator >= v1.7.71): the principal it acts for and

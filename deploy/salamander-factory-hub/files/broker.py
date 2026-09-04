@@ -233,6 +233,8 @@ class H(BaseHTTPRequestHandler):
         if action == "provision":
             if rec and rec.get("phase") in ("provisioning", "resetting") and job_active(f"provision-{h}"):
                 return self.send(202, {"phase": rec["phase"], "note": "already running"})
+            if h and job_active(f"deprovision-{h}"):
+                return self.send(409, {"error": "this seat is still being removed — try again in a minute"})
             if not rec and sum(1 for r in all_seats.values() if r.get("phase") in ("ready", "provisioning")) >= MAX_SEATS:
                 return self.send(429, {"error": f"all {MAX_SEATS} workbenches are taken right now — ask your host to free one"})
             h = h or S.allocate_handle(u, all_seats)
