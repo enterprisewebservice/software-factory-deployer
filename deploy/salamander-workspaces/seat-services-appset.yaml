@@ -29,6 +29,11 @@ spec:
   # the desk's cron jobs. Resources now outlive the Application object.
   syncPolicy:
     preserveResourcesOnDeletion: true
+    # The generator only ever creates and updates Applications; it never
+    # deletes one because a repo failed to show up in a scan. Removing an
+    # agent or a seat is an explicit act (reset-seat.sh deletes the seat's
+    # Applications by name; platform agents are removed by hand).
+    applicationsSync: create-update
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
