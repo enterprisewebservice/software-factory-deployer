@@ -9,6 +9,13 @@ metadata:
   name: agent-office-agents-gitea
   namespace: openshift-gitops
 spec:
+  # A generator hiccup (GitHub 5xx on the pathsExist check, a Gitea blip)
+  # makes an Application vanish for a minute; without this the app is
+  # deleted WITH its finalizer and everything it created goes too —
+  # 2026-09-04 that took the upstreambeat newsroom gateway, its PVC and
+  # the desk's cron jobs. Resources now outlive the Application object.
+  syncPolicy:
+    preserveResourcesOnDeletion: true
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
