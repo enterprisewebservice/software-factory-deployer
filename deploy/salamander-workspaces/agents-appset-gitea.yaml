@@ -86,8 +86,6 @@ spec:
       requeueAfterSeconds: 60
   template:
     metadata:
-      finalizers:
-      - resources-finalizer.argocd.argoproj.io
       labels:
         app.kubernetes.io/managed-by: agent-office-applicationset
       name: '{{ .organization }}-{{ trimSuffix "-gitops" .repository }}'

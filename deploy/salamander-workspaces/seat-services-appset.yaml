@@ -97,8 +97,6 @@ spec:
       name: '{{ .organization }}-{{ .repository }}'
       labels:
         app.kubernetes.io/managed-by: seat-services-applicationset
-      finalizers:
-        - resources-finalizer.argocd.argoproj.io
     spec:
       project: agent-office
       source:
