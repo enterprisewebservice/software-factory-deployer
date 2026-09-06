@@ -37,7 +37,7 @@ custom identity providers, nothing in cluster auth config is touched.
   the fallback if SSO account creation fails; it is no longer shown.
 * **The seat agent's Gitea credential** — the operator renders `${GITEA_TOKEN}` into the
   gateway's Gitea MCP header from Secret `<handle>-gitea-token` in the workspace (the same
-  contract user1..5 fill from Vault via the refresher, which only knows those five). Dynamic
+  contract the retired static seats filled from Vault via a refresher CronJob; both are gone as of 2026-09-06). Dynamic
   seats mint it with the Gitea admin acting as the user (`Sudo`): scopes
   `write:repository, write:organization, write:issue, read:user`, id recorded on the seat
   Secret, **revoked on Remove**. The person never types a Gitea password for it.
