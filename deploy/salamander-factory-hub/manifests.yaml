@@ -215,6 +215,7 @@ spec:
             - { name: HELP_MODEL, value: "openclaw/handsonmode-help" }
             - { name: HELP_TOKEN_SECRET, value: "agent-office/handsonmode-help-token" }
             - { name: HELP_MAIL_TO, value: "admin@enterprisewebservice.com" }
+            - { name: DIGEST_HOUR_UTC, value: "13" }   # the daily progress digest (files/digest.py): 08:00 Central
             - { name: HELP_MAIL_FROM, value: "Hands-On Mode help desk <desk@upstreambeat.ai>" }
             - { name: HELP_IDLE_MINUTES, value: "30" }
             - { name: S3_ENDPOINT, value: "http://s3.openshift-storage.svc:80" }
@@ -312,5 +313,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: factory-progress
+  namespace: factory-hub
+data: {}
+---
+# The help desk tool server's sweep verdicts (agent-office/seat-triage writes, the hub reads).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: factory-sweep
   namespace: factory-hub
 data: {}

@@ -20,6 +20,7 @@ configMapGenerator:
       - broker.py=files/broker.py
       - helpdesk.py=files/helpdesk.py
       - progress.py=files/progress.py
+      - digest.py=files/digest.py
       - seatlib.py=files/seatlib.py
   - name: factory-hub-scripts
     files:

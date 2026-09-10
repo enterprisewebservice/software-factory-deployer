@@ -17,6 +17,7 @@
   .btn.dark { background:#151515; } .btn.ghost { background:transparent; border:1px solid #5a5a5a; color:#fff; } .btn[disabled] { opacity:.4; cursor:default; }
   main { max-width:1120px; margin:0 auto; padding:2rem 1.5rem 3rem; } h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.6rem; }
   .sub { color:var(--muted); margin-top:0.2rem; }
+  .ok { color:#1e7f3a; font-weight:600; } .bad { color:#c9190b; font-weight:700; } .muted { color:var(--muted); }
   table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:8px; margin-top:1.2rem; font-size:0.9rem; }
   th, td { text-align:left; padding:0.6rem 0.8rem; border-top:1px solid var(--line); } th { border-top:0; color:var(--muted); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; }
   code { font-family:"Red Hat Mono",monospace; background:#f2f2f2; border:1px solid var(--line); border-radius:4px; padding:0.1rem 0.4rem; }
@@ -98,11 +99,15 @@ async function renderProgress(){
   const {ok,status,data} = await api('/api/admin/progress');
   if (!ok) { prog.innerHTML = '<p class="muted" style="margin-top:1rem">' + (status===403 ? 'Admins only.' : 'Could not load progress.') + '</p>'; return; }
   const order = ['start','overview','setup','1','2','3','4','5','6','7','8','other'];
-  prog.innerHTML = '<table><tr><th>User</th><th>Edition</th><th>Last seen</th><th>Now on</th><th>Time by module</th><th>Total</th><th>Views</th></tr>' + data.seats.map(s => {
+  prog.innerHTML = '<table><tr><th>User</th><th>Edition</th><th>Last seen</th><th>Now on</th><th>Time by module</th><th>Total</th><th>Done (sweep)</th><th>Errors</th></tr>' + data.seats.map(s => {
+    const done = Object.keys(s.checks||{}).sort().map(n => { const c=s.checks[n]; const st=c.status||''; const cls = st==='done'?'ok':(st==='looks wrong'?'bad':'muted'); return '<span class="'+cls+'" title="'+esc(st+(c.first_done?' since '+c.first_done:'')+' · '+(c.evidence||[]).join(' / '))+'">M'+n+(st==='done'?'✓':(st==='looks wrong'?'✗':'·'))+'</span>'; }).join(' ');
+    const errs = (s.errors||[]);
     const mods = order.filter(k => s.modules[k]).map(k => '<span class="pill" title="'+esc(s.modules[k].label)+' · '+s.modules[k].views+' views · last '+esc(s.modules[k].last||'')+'">'+esc(/^\d$/.test(k)?'M'+k:s.modules[k].label)+' '+dur(s.modules[k].seconds)+'</span>').join(' ');
     return '<tr><td>'+esc(s.username)+' <span class="muted"><code>'+esc(s.handle)+'</code></span></td><td>'+esc(s.brand)+'</td><td title="'+esc(s.last_seen||'')+'">'+ago(s.last_seen)+'</td>'
       + '<td>'+(s.current ? esc(s.current.label)+(s.current.title?' <span class="muted">· '+esc(s.current.title).slice(0,60)+'</span>':'') : '<span class="muted">not opened yet</span>')+'</td>'
-      + '<td>'+(mods||'<span class="muted">—</span>')+'</td><td>'+dur(s.total_seconds)+'</td><td>'+s.views+'</td></tr>'; }).join('') + '</table>';
+      + '<td>'+(mods||'<span class="muted">—</span>')+'</td><td>'+dur(s.total_seconds)+'</td>'
+      + '<td title="'+esc(s.swept_at?('swept '+s.swept_at):'not swept yet')+'">'+(done||'<span class="muted">not swept yet</span>')+'</td>'
+      + '<td>'+(errs.length ? '<span class="bad" title="'+esc(errs.map(e=>e.text).join('\n'))+'">'+errs.length+'</span> <span class="muted">'+esc(errs[0].text).slice(0,70)+'</span>' : '<span class="ok">none</span>')+'</td></tr>'; }).join('') + '</table>';
 }
 renderProgress(); setInterval(renderProgress, 60000);
 async function render(){

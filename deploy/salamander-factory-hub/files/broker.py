@@ -20,6 +20,7 @@ sys.path.insert(0, "/app")
 import seatlib as S
 import helpdesk as HD   # the help desk agent's browser side (/api/help/*)
 import progress as P    # the attendee progress ledger (/api/progress beacon, /api/admin/progress)
+import digest as D      # the daily progress digest email (+ POST /api/admin/digest)
 
 ADMINS = {u.strip() for u in os.environ.get("ADMIN_USERS", "").split(",") if u.strip()}
 MAX_SEATS = int(os.environ.get("MAX_SEATS", "25"))
@@ -209,6 +210,11 @@ class H(BaseHTTPRequestHandler):
         if parts[:2] == ["api", "help"]:
             h, rec = S.seat_for(u, all_seats)
             return HD.handle_post(self, "/" + "/".join(parts), u, h, rec, self.body())
+        if parts[:3] == ["api", "admin", "digest"]:
+            if u not in ADMINS:
+                return self.send(403, {"error": "admins only"})
+            subject, text = D.compose(P.rows(k8s, S.HUB_NS, all_seats))
+            return self.send(200, {"sent": D.send(subject, text), "subject": subject, "text": text})
         # /api/admin/remove  {handles:[...] | all:true, purge_login:bool, dry_run:bool}
         # Wholesale removal: every selected seat is deprovisioned (one Job
         # each, in parallel); with purge_login the person's sign-in
@@ -298,4 +304,5 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"broker on 0.0.0.0:9000 (identity from loopback only) admins={sorted(ADMINS)} max_seats={MAX_SEATS}", flush=True)
+    D.start(lambda: P.rows(k8s, S.HUB_NS, seats()), k8s, S.HUB_NS)
     ThreadingHTTPServer(("0.0.0.0", 9000), H).serve_forever()

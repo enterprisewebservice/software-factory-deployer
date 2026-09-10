@@ -38,8 +38,8 @@ def module_of(path, title):
     return "other"
 
 
-def load(k8s, hub_ns):
-    code, cm = k8s("GET", f"/api/v1/namespaces/{hub_ns}/configmaps/{CM}")
+def load(k8s, hub_ns, name=None):
+    code, cm = k8s("GET", f"/api/v1/namespaces/{hub_ns}/configmaps/{name or CM}")
     out = {}
     for h, raw in ((cm.get("data") or {}) if code == 200 else {}).items():
         try: out[h] = json.loads(raw)
@@ -66,9 +66,14 @@ def record(k8s, hub_ns, handle, ev, path, title):
     return rec
 
 
+SWEEP_CM = "factory-sweep"
+
+
 def rows(k8s, hub_ns, seats):
-    prog = load(k8s, hub_ns); out = []
+    prog = load(k8s, hub_ns); sweep = load(k8s, hub_ns, SWEEP_CM); out = []
     for h, rec in seats.items():
+        if h.startswith("_"):
+            continue
         p = prog.get(h) or {}
         mods = {k: {"label": MODULES.get(k, k), "seconds": v.get("seconds", 0), "views": v.get("views", 0), "first": v.get("first"), "last": v.get("last")}
                 for k, v in (p.get("modules") or {}).items()}
@@ -77,6 +82,11 @@ def rows(k8s, hub_ns, seats):
                     "ready": rec.get("ready"), "last_seen": p.get("last_seen"), "first_seen": p.get("first_seen"),
                     "current": {**cur, "label": MODULES.get(cur.get("module"), cur.get("module"))} if cur else None,
                     "modules": mods, "total_seconds": sum(m["seconds"] for m in mods.values()),
-                    "views": sum(m["views"] for m in mods.values()), "recent": (p.get("recent") or [])[-8:]})
+                    "views": sum(m["views"] for m in mods.values()), "recent": (p.get("recent") or [])[-8:],
+                    # the sweep's verdicts: module status judged from the seat itself, errors visible now
+                    "swept_at": (sweep.get(h) or {}).get("at"), "checks": (sweep.get(h) or {}).get("modules") or {},
+                    "errors": (sweep.get(h) or {}).get("errors") or [],
+                    "done": sorted(n for n, c in ((sweep.get(h) or {}).get("modules") or {}).items() if c.get("status") == "done"),
+                    "wrong": sorted(n for n, c in ((sweep.get(h) or {}).get("modules") or {}).items() if c.get("status") == "looks wrong")})
     out.sort(key=lambda r: r.get("last_seen") or "", reverse=True)
     return out
