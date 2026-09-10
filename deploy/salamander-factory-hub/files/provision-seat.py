@@ -139,6 +139,27 @@ try:
             print("attendees membership:", code)
         else:
             print("attendees group unavailable — hires would route to GitHub!")
+        # Brand group — the door the seat came through decides which brains the
+        # platform offers (the ModelConnections' access lists name these groups):
+        # handsonmode.ai seats get the OpenAI-API brains, Red Hat hub seats also
+        # get Claude on the work subscription. A re-provision through the other
+        # door moves the membership, so the menu follows the door.
+        brand_now = (os.environ.get("SEAT_BRAND") or rec.get("brand") or "redhat").strip()
+        want = "handsonmode-attendees" if brand_now == "handsonmode" else "redhat-attendees"
+        for gname in ("handsonmode-attendees", "redhat-attendees"):
+            code, groups = http("GET", f"{KCR}/groups?search={gname}&exact=true", headers=hdr)
+            g = groups[0]["id"] if code == 200 and groups else ""
+            if not g and gname == want:
+                http("POST", f"{KCR}/groups", {"name": gname}, headers=hdr)
+                code, groups = http("GET", f"{KCR}/groups?search={gname}&exact=true", headers=hdr)
+                g = groups[0]["id"] if code == 200 and groups else ""
+            if not g:
+                continue
+            if gname == want:
+                code, _ = http("PUT", f"{KCR}/users/{KC_UID}/groups/{g}", headers=hdr)
+                print(f"{gname} membership:", code)
+            else:
+                http("DELETE", f"{KCR}/users/{KC_UID}/groups/{g}", headers=hdr, ok=(204, 404))
         code, mine = http("GET", f"{KCR}/users/{KC_UID}/groups", headers=hdr)
         if code == 200 and isinstance(mine, list):
             for g in mine:
