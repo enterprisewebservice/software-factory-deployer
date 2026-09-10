@@ -37,7 +37,8 @@ def compose(rows, now=None):
     day = 86400
     active = [r for r in rows if (_age(r.get("last_seen")) or 1e9) <= day
               or any((_age(c.get("first_done")) or 1e9) <= day for c in (r.get("checks") or {}).values())]
-    quiet = [r for r in rows if (_age(r.get("last_seen")) or 1e9) > 7 * day]
+    quiet = [r for r in rows if r.get("last_seen") and _age(r.get("last_seen")) > 7 * day]
+    never = [r for r in rows if not r.get("last_seen") and (_age(r.get("ready")) or 0) > day]
     stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).strftime("%a %d %b %Y")
     L = [f"Workshop digest, {stamp} (UTC)", "", f"Active in the last 24 h: {len(active)} of {len(rows)} seats."]
     stuck = []
@@ -70,6 +71,8 @@ def compose(rows, now=None):
         L += ["", f"(help desk count unavailable: {str(e)[:80]})"]
     if quiet:
         L += ["", "Quiet for 7+ days: " + ", ".join(str(r.get("username")) for r in quiet) + "."]
+    if never:
+        L += ["", "No guide page views recorded yet (seat older than a day): " + ", ".join(str(r.get("username")) for r in never) + "."]
     L += ["", f"Admin page: {ADMIN_URL}"]
     subject = f"Workshop digest: {len(active)} active, {len(stuck)} stuck ({stamp})"
     return subject, "\n".join(L)
