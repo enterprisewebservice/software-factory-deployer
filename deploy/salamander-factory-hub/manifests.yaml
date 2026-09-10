@@ -90,6 +90,12 @@ data:
         }
         # /help — every seat's Help tab: the help desk agent's page (signed-in).
         location = /help { return 302 /hub/help.html; }
+        # /terms — public terms of use, served from the library pod
+        location = /terms {
+          add_header Cache-Control "no-store" always;
+          proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
+          proxy_set_header Host $host;
+        }
         location = /hub/favicon.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
         location = /hub/hom-wordmark.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
         # The hub pages' static <link rel=icon> fetches this path before any
@@ -107,8 +113,11 @@ data:
         }
         location = /favicon.ico { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080/favicon.ico; proxy_set_header Host $host; }
         location = /hub/favicon.png { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
+        # /drills — unlisted for now: oauth-proxy no longer skips auth here, and
+        # only the hub admin gets through; everyone else sees 404.
         location = /drills { return 302 /drills/ex267/; }
         location /drills/ {
+          if ($http_x_forwarded_user != "dpeterson") { return 404; }
           proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
           proxy_set_header Host $host;
         }
@@ -176,7 +185,7 @@ spec:
             - --skip-auth-regex=^/hub/(favicon|hom-wordmark)\.svg$
             - --skip-auth-regex=^/hub/favicon\.png$
             - --skip-auth-regex=^/favicon\.ico$
-            - --skip-auth-regex=^/drills(/|$)
+            - --skip-auth-regex=^/terms$
             - --skip-provider-button=true
           ports: [{ containerPort: 4180 }]
           volumeMounts:
