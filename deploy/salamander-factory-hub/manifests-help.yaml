@@ -1,0 +1,56 @@
+# The help desk's storage + mail plumbing. Both follow the platform's own
+# rules: no credential is typed by a human, nothing lives in git.
+#
+#   help-transcripts   ObjectBucketClaim on the cluster's NooBaa: yields a bucket
+#                      plus Secret help-transcripts (AWS keys) and ConfigMap
+#                      help-transcripts (BUCKET_NAME/HOST/PORT), both mounted into
+#                      the broker as env. Every conversation lands there.
+#   help-mail          the newsroom's SES SMTP credential, mirrored ONE key at a
+#                      time with External Secrets' kubernetes provider: SA
+#                      mail-secret-reader may read upstreambeat/upstreambeat-app-secrets
+#                      (Role in the upstreambeat repo, deploy/openshift/48-help-mail-reader.yaml).
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: help-transcripts
+  namespace: factory-hub
+spec:
+  generateBucketName: help-transcripts
+  storageClassName: openshift-storage.noobaa.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mail-secret-reader
+  namespace: factory-hub
+---
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: upstreambeat-mail-store
+  namespace: factory-hub
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: upstreambeat
+      server:
+        url: kubernetes.default
+        caProvider: { type: ConfigMap, name: kube-root-ca.crt, key: ca.crt }
+      auth:
+        serviceAccount: { name: mail-secret-reader }
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: help-mail
+  namespace: factory-hub
+spec:
+  refreshInterval: 10m
+  secretStoreRef: { kind: SecretStore, name: upstreambeat-mail-store }
+  target:
+    name: help-mail
+    creationPolicy: Owner
+  data:
+    - secretKey: SMTP_URL
+      remoteRef: { key: upstreambeat-app-secrets, property: SMTP_URL }

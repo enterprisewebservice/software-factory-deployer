@@ -100,3 +100,24 @@ metadata:
   name: factory-seats
   namespace: factory-hub
 data: {}
+---
+# The help desk's tool server (agent-office/seat-triage) resolves a handle to a
+# seat through the factory-seats ConfigMap — read-only, this one object.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: seat-triage-seats-reader
+  namespace: factory-hub
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [factory-seats]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: seat-triage-seats-reader
+  namespace: factory-hub
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: seat-triage-seats-reader }
+subjects: [{ kind: ServiceAccount, name: seat-triage, namespace: agent-office }]

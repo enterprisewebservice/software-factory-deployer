@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help desk</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/hub/assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500;700;900&family=Red+Hat+Text:wght@400;500;700&family=Red+Hat+Mono:wght@400&display=swap">
+<style>
+  :root { --accent: #EE0000; --ink: #151515; --muted: #5a6470; --line: #e3e7ec; --bg: #f5f7f9; --bubble: #ffffff; --mine: #e8f0ff; }
+  body.hom { --accent: #246BFE; --ink: #13233D; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Red Hat Text", system-ui, sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
+  header { background: #fff; border-bottom: 3px solid var(--accent); padding: 0.7rem 1.25rem; display: flex; align-items: center; gap: 0.9rem; }
+  header h1 { font-family: "Red Hat Display", sans-serif; font-weight: 900; font-size: 1.15rem; }
+  header .who { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+  header .who b { color: var(--ink); }
+  main { flex: 1; max-width: 900px; width: 100%; margin: 0 auto; padding: 1.2rem 1.25rem 0; display: flex; flex-direction: column; }
+  .note { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.9rem; max-width: 62ch; }
+  #log { flex: 1; display: flex; flex-direction: column; gap: 0.7rem; padding-bottom: 1rem; }
+  .msg { max-width: 78%; padding: 0.7rem 0.95rem; border-radius: 14px; background: var(--bubble); border: 1px solid var(--line); white-space: pre-wrap; line-height: 1.45; font-size: 0.97rem; }
+  .msg.me { align-self: flex-end; background: var(--mine); border-color: #cddcff; }
+  .msg.agent { align-self: flex-start; border-left: 3px solid var(--accent); }
+  .msg .meta { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 0.4rem; font-family: "Red Hat Mono", monospace; }
+  .msg code { font-family: "Red Hat Mono", monospace; font-size: 0.9em; background: #eef1f5; padding: 0.05rem 0.3rem; border-radius: 4px; }
+  .thinking { align-self: flex-start; color: var(--muted); font-size: 0.85rem; padding: 0.2rem 0.4rem; }
+  .thinking i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  form { position: sticky; bottom: 0; background: var(--bg); padding: 0.8rem 0 1.1rem; display: flex; gap: 0.6rem; align-items: flex-end; border-top: 1px solid var(--line); }
+  textarea { flex: 1; min-height: 52px; max-height: 180px; resize: vertical; padding: 0.7rem 0.85rem; border: 1px solid var(--line); border-radius: 12px; font: inherit; font-size: 0.97rem; background: #fff; }
+  button { font: inherit; font-weight: 700; padding: 0.7rem 1rem; border-radius: 10px; border: 1px solid var(--line); background: #fff; cursor: pointer; color: var(--ink); }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .signin { margin: 3rem auto; text-align: center; max-width: 40ch; }
+  .signin a { display: inline-block; margin-top: 0.8rem; background: var(--accent); color: #fff; text-decoration: none; padding: 0.7rem 1.1rem; border-radius: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Help desk</h1>
+  <span class="who" id="who"></span>
+</header>
+<main>
+  <p class="note">A person reads every transcript, so say what you tried and what you saw. Replies take 20 to 60 seconds: the agent looks at your seat on the cluster before it answers.</p>
+  <div id="log"></div>
+  <form id="f">
+    <textarea id="t" placeholder="Which module are you on, and what happened?" required></textarea>
+    <button type="button" id="end" title="Send the transcript to a person and start fresh next time">End &amp; send transcript</button>
+    <button type="submit" class="primary" id="send">Send</button>
+  </form>
+</main>
+<script>
+if (/handsonmode\.(ai|com)$/i.test(location.hostname)) document.body.classList.add('hom');
+const log = document.getElementById('log'), form = document.getElementById('f'), ta = document.getElementById('t');
+const sendBtn = document.getElementById('send'), endBtn = document.getElementById('end');
+let conversationId = null, busy = false;
+async function api(path, method = 'GET', body) {
+  const r = await fetch(path, { method, credentials: 'include', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const ct = r.headers.get('content-type') || '';
+  if (!ct.includes('json')) throw new Error('signed-out');
+  return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+}
+function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+function render(text) { return esc(text).replace(/`([^`\n]+)`/g, '<code>$1</code>'); }
+function add(role, text, meta) {
+  const d = document.createElement('div'); d.className = 'msg ' + (role === 'user' ? 'me' : 'agent');
+  d.innerHTML = render(text) + (meta ? '<span class="meta">' + esc(meta) + '</span>' : '');
+  log.appendChild(d); d.scrollIntoView({ block: 'end' }); return d;
+}
+function thinking(on) {
+  let el = document.getElementById('thinking');
+  if (on && !el) { el = document.createElement('div'); el.id = 'thinking'; el.className = 'thinking'; el.innerHTML = '<i></i>looking at your seat…'; log.appendChild(el); el.scrollIntoView({ block: 'end' }); }
+  if (!on && el) el.remove();
+}
+function setBusy(b) { busy = b; sendBtn.disabled = b; endBtn.disabled = b; ta.disabled = b; thinking(b); }
+async function boot() {
+  let seat;
+  try { seat = (await api('/api/seat')).data; } catch (e) {
+    document.querySelector('main').innerHTML = '<div class="signin"><p>Sign in to talk to the help desk. It needs to know whose seat to look at.</p><a href="/hub/help.html?signin=1">Sign in →</a></div>'; return;
+  }
+  document.getElementById('who').innerHTML = 'signed in as <b>' + esc(seat.user || '') + '</b>' + (seat.handle ? ' · seat <b>' + esc(seat.handle) + '</b>' : ' · no seat yet');
+  const { data } = await api('/api/help/conversation');
+  if (data.conversation) {
+    conversationId = data.conversation.id;
+    for (const m of data.conversation.messages) add(m.role, m.content, m.role === 'assistant' && m.seconds ? m.seconds + 's' : '');
+  } else {
+    add('assistant', data.intro);
+  }
+  ta.focus();
+}
+form.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const text = ta.value.trim(); if (!text || busy) return;
+  add('user', text); ta.value = ''; setBusy(true);
+  try {
+    const { ok, data } = await api('/api/help/chat', 'POST', { conversation_id: conversationId, message: text });
+    if (!ok) throw new Error(data.error || 'failed');
+    conversationId = data.conversation_id;
+    add('assistant', data.reply, data.seconds + 's');
+  } catch (e) {
+    add('assistant', e.message === 'signed-out' ? 'Your sign-in expired. Reload this page and sign in again.' : 'Something went wrong on my side: ' + e.message);
+  } finally { setBusy(false); ta.focus(); }
+});
+endBtn.addEventListener('click', async () => {
+  if (!conversationId || busy) return;
+  if (!confirm('Send this transcript to a person and end the conversation?')) return;
+  setBusy(true);
+  try {
+    const { data } = await api('/api/help/end', 'POST', { conversation_id: conversationId });
+    add('assistant', data.emailed ? 'Transcript sent. A person will read it. Start a new message any time.' : 'Conversation ended and stored. (The mail step did not run; the transcript is kept on the cluster.)');
+    conversationId = null;
+  } catch (e) { add('assistant', 'Could not end the conversation: ' + e.message); }
+  finally { setBusy(false); }
+});
+ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+boot();
+</script>
+</body>
+</html>

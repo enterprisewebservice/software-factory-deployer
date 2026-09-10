@@ -18,6 +18,7 @@ import json, os, ssl, sys, time, urllib.request, urllib.error, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, "/app")
 import seatlib as S
+import helpdesk as HD   # the help desk agent's browser side (/api/help/*)
 
 ADMINS = {u.strip() for u in os.environ.get("ADMIN_USERS", "").split(",") if u.strip()}
 MAX_SEATS = int(os.environ.get("MAX_SEATS", "25"))
@@ -157,6 +158,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(401, {"error": "no identity"})
         if self.path.startswith("/api/seat"):
             return self.send(200, self.status_for(u, seats()))
+        if self.path.startswith("/api/help/"):
+            h, rec = S.seat_for(u, seats())
+            return HD.handle_get(self, u, h, rec)
         if self.path.startswith("/api/admin/seats"):
             if u not in ADMINS:
                 return self.send(403, {"error": "admins only"})
@@ -180,6 +184,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(401, {"error": "no identity"})
         all_seats = seats()
         parts = [p for p in self.path.split("?")[0].split("/") if p]
+        if parts[:2] == ["api", "help"]:
+            h, rec = S.seat_for(u, all_seats)
+            return HD.handle_post(self, "/" + "/".join(parts), u, h, rec, self.body())
         # /api/admin/remove  {handles:[...] | all:true, purge_login:bool, dry_run:bool}
         # Wholesale removal: every selected seat is deprovisioned (one Job
         # each, in parallel); with purge_login the person's sign-in

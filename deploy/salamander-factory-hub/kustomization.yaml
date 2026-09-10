@@ -4,6 +4,7 @@ namespace: factory-hub
 resources:
   - manifests.yaml
   - manifests-rbac.yaml
+  - manifests-help.yaml
 # Page content ships as ConfigMaps generated from the real files; after
 # editing, `oc apply -k deploy/salamander-factory-hub` then
 # `oc rollout restart deployment/factory-hub -n factory-hub`.
@@ -13,9 +14,11 @@ configMapGenerator:
       - landing.html=files/landing.html
       - mylab.html=files/mylab.html
       - admin.html=files/admin.html
+      - help.html=files/help.html
   - name: factory-hub-broker
     files:
       - broker.py=files/broker.py
+      - helpdesk.py=files/helpdesk.py
       - seatlib.py=files/seatlib.py
   - name: factory-hub-scripts
     files:

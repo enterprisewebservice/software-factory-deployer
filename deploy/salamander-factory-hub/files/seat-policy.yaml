@@ -139,3 +139,28 @@ spec:
   data:
     - secretKey: auth.json
       remoteRef: { key: codex-subscription-credentials, property: auth.json }
+---
+# The Hands-On Mode help desk agent's tool server (agent-office/seat-triage)
+# is namespace admin of every seat — both namespaces — so it can read logs,
+# exec into the seat's gateway pod, restart or delete a stuck pod while
+# triaging with the attendee. Seats are dynamic, so the grant travels with
+# the seat: this file is applied at provision time. Nothing cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: seat-triage-admin
+  namespace: __HANDLE__-agent-workspace
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: admin }
+subjects:
+  - { kind: ServiceAccount, name: seat-triage, namespace: agent-office }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: seat-triage-admin
+  namespace: showroom-__HANDLE__
+  labels: { app.kubernetes.io/managed-by: factory-hub }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: admin }
+subjects:
+  - { kind: ServiceAccount, name: seat-triage, namespace: agent-office }

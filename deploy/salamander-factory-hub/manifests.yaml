@@ -88,6 +88,8 @@ data:
           proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080;
           proxy_set_header Host $host;
         }
+        # /help — every seat's Help tab: the help desk agent's page (signed-in).
+        location = /help { return 302 /hub/help.html; }
         location = /hub/favicon.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
         location = /hub/hom-wordmark.svg { proxy_pass http://handsonmode-hub.showroom-handsonmode.svc.cluster.local:8080; proxy_set_header Host $host; }
         # The hub pages' static <link rel=icon> fetches this path before any
@@ -198,6 +200,19 @@ spec:
           env:
             - { name: ADMIN_USERS, value: "dpeterson" }
             - { name: MAX_SEATS, value: "25" }
+            # help desk (files/helpdesk.py): the agent's gateway, its token, where
+            # transcripts go. Bucket + mail come from manifests-help.yaml.
+            - { name: HELP_GATEWAY_URL, value: "http://handsonmode-help.agent-office.svc.cluster.local:18789" }
+            - { name: HELP_MODEL, value: "openclaw/handsonmode-help" }
+            - { name: HELP_TOKEN_SECRET, value: "agent-office/handsonmode-help-token" }
+            - { name: HELP_MAIL_TO, value: "admin@enterprisewebservice.com" }
+            - { name: HELP_MAIL_FROM, value: "Hands-On Mode help desk <desk@upstreambeat.ai>" }
+            - { name: HELP_IDLE_MINUTES, value: "30" }
+            - { name: S3_ENDPOINT, value: "http://s3.openshift-storage.svc:80" }
+          envFrom:
+            - { configMapRef: { name: help-transcripts, optional: true } }   # BUCKET_NAME
+            - { secretRef: { name: help-transcripts, optional: true } }      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+            - { secretRef: { name: help-mail, optional: true } }             # SMTP_URL
           volumeMounts:
             - { name: broker, mountPath: /app, readOnly: true }
           resources: { requests: { cpu: 10m, memory: 48Mi }, limits: { cpu: 300m, memory: 192Mi } }
