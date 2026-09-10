@@ -295,3 +295,22 @@ spec:
       http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { number: 8080 } } } }] }
     - host: www.handsonmode.com
       http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: factory-hub, port: { number: 8080 } } } }] }
+---
+# The broker on the pod network, for the seats' progress beacons only (every
+# identity-bearing call still comes through nginx on loopback).
+apiVersion: v1
+kind: Service
+metadata:
+  name: factory-hub-broker
+  namespace: factory-hub
+spec:
+  selector: { app: factory-hub }
+  ports: [{ name: broker, port: 9000, targetPort: 9000 }]
+---
+# Attendee progress ledger (files/progress.py): one JSON record per seat handle.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: factory-progress
+  namespace: factory-hub
+data: {}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """factory-hub broker — seat lookup, provisioning, reset, admin.
 
-Listens on 127.0.0.1:9000 behind nginx, which sits behind OpenShift
+Listens on 0.0.0.0:9000: behind nginx for people (identity = X-Forwarded-User, loopback only) and on the pod network for the seats' progress beacons (identity = per-seat token), which sits behind OpenShift
 oauth-proxy. The workshop itself is NOT proxied here: each seat is on
 its own hostname behind its own oauth-proxy (SubjectAccessReview). Identity is the X-Forwarded-User header oauth-proxy sets
 from the OpenShift session; nginx forwards it and nothing else can
@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, "/app")
 import seatlib as S
 import helpdesk as HD   # the help desk agent's browser side (/api/help/*)
+import progress as P    # the attendee progress ledger (/api/progress beacon, /api/admin/progress)
 
 ADMINS = {u.strip() for u in os.environ.get("ADMIN_USERS", "").split(",") if u.strip()}
 MAX_SEATS = int(os.environ.get("MAX_SEATS", "25"))
@@ -125,6 +126,11 @@ class H(BaseHTTPRequestHandler):
         sys.stdout.write("%s %s\n" % (self.headers.get("X-Forwarded-User", "-"), fmt % args)); sys.stdout.flush()
 
     def user(self):
+        # Identity is only what nginx (same pod) forwards. The broker also
+        # listens on the pod network for the seats' progress beacons, and a
+        # header from anywhere else on the cluster proves nothing.
+        if self.client_address[0] not in ("127.0.0.1", "::1"):
+            return ""
         return (self.headers.get("X-Forwarded-User") or "").strip()
 
     def send(self, code, obj, extra=None):
@@ -161,6 +167,10 @@ class H(BaseHTTPRequestHandler):
         if self.path.startswith("/api/help/"):
             h, rec = S.seat_for(u, seats())
             return HD.handle_get(self, u, h, rec)
+        if self.path.startswith("/api/admin/progress"):
+            if u not in ADMINS:
+                return self.send(403, {"error": "admins only"})
+            return self.send(200, {"seats": P.rows(k8s, S.HUB_NS, seats())})
         if self.path.startswith("/api/admin/seats"):
             if u not in ADMINS:
                 return self.send(403, {"error": "admins only"})
@@ -179,6 +189,18 @@ class H(BaseHTTPRequestHandler):
             return {}
 
     def do_POST(self):
+        if self.path.split("?")[0] == "/api/progress":
+            # the guide's beacon, arriving through the seat's own traefik: the
+            # seat's identity is the (handle, token) pair the provisioner rendered
+            h = (self.headers.get("X-Seat-Handle") or "").strip(); tok = (self.headers.get("X-Seat-Token") or "").strip()
+            rec = seats().get(h) if h else None
+            if not rec or not tok or tok != rec.get("progress_token"):
+                return self.send(401, {"error": "unknown seat"})
+            b = self.body(); ev = b.get("ev")
+            if ev not in ("view", "beat", "leave"):
+                return self.send(400, {"error": "ev must be view|beat|leave"})
+            P.record(k8s, S.HUB_NS, h, ev, str(b.get("path") or ""), str(b.get("title") or ""))
+            return self.send(200, {"ok": True})
         u = self.user()
         if not u:
             return self.send(401, {"error": "no identity"})
@@ -275,5 +297,5 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"broker on 127.0.0.1:9000 admins={sorted(ADMINS)} max_seats={MAX_SEATS}", flush=True)
-    ThreadingHTTPServer(("127.0.0.1", 9000), H).serve_forever()
+    print(f"broker on 0.0.0.0:9000 (identity from loopback only) admins={sorted(ADMINS)} max_seats={MAX_SEATS}", flush=True)
+    ThreadingHTTPServer(("0.0.0.0", 9000), H).serve_forever()

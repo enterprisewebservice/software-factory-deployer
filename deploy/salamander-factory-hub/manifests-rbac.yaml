@@ -7,7 +7,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: [configmaps]
-    resourceNames: [factory-seats]
+    resourceNames: [factory-seats, factory-progress]
     verbs: [get, patch]
   - apiGroups: [""]
     resources: [secrets]

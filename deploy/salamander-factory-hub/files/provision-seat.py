@@ -492,8 +492,14 @@ try:
     # generated password — every surface is their own sign-up login — so
     # the attribute renders as a reminder sentence wherever it appears.
     # (Instructor seats keep a real value in their own userdata.)
+    # The guide's progress beacon reaches the hub through the seat's traefik,
+    # which stamps this per-seat token on every beacon so the hub can trust
+    # the handle it carries (the record keeps the same token across reprovisions).
+    if not rec.get("progress_token"):
+        rec["progress_token"] = secrets.token_urlsafe(24)
+        S.write_seat(HANDLE, rec)
     tmpl = open("/scripts/seat-showroom.yaml").read().replace("__USER__", HANDLE).replace(
-        "__PASSWORD__", "the password you chose when you signed up")
+        "__PASSWORD__", "the password you chose when you signed up").replace("__PROGRESS_TOKEN__", rec["progress_token"])
     # seat_mode drives the guide's ifeval blocks: a self-service reader
     # only ever sees self-service instructions (no mention of other seat
     # types); instructor seats default to seat_mode=seat in the content.

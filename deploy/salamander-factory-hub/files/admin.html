@@ -46,7 +46,9 @@
   <span class="spacer"></span><a class="btn ghost" href="/hub/mylab.html">My workbench</a><a class="btn ghost" href="/oauth/sign_out" onclick="switchUser(event)">Sign out / switch user</a>
 </div></nav>
 <main>
-  <h1>Seats</h1><div class="sub" id="sub">Every workbench provisioned through the hub. Reset returns a seat to Module 1; re-provision repairs a broken one.</div>
+  <h1>Progress</h1><div class="sub">Where each person is in the guide, how long they have spent on each module, and when they were last seen. Fed by the guide pages themselves; refreshes every minute.</div>
+  <div id="prog"></div>
+  <h1 style="margin-top:2.4rem">Seats</h1><div class="sub" id="sub">Every workbench provisioned through the hub. Reset returns a seat to Module 1; re-provision repairs a broken one.</div>
   <div class="bulk">
     <button class="btn" id="removeSel" disabled>Remove selected</button>
     <button class="btn dark" id="removeAll">Remove all attendees</button>
@@ -89,6 +91,20 @@ async function bulkRemove(spec, label){
 document.getElementById('removeSel').onclick = () => bulkRemove({handles:[...selected]}, 'Remove selected');
 document.getElementById('removeAll').onclick = () => bulkRemove({all:true}, 'Remove all attendees');
 function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function ago(iso){ if(!iso) return '<span class="muted">never</span>'; const s=(Date.now()-Date.parse(iso))/1000; if(s<90) return 'just now'; if(s<3600) return Math.round(s/60)+' min ago'; if(s<86400) return Math.round(s/3600)+' h ago'; return Math.round(s/86400)+' d ago'; }
+function dur(sec){ sec=Math.round(sec||0); if(sec<60) return sec+'s'; if(sec<3600) return Math.round(sec/60)+'m'; return Math.floor(sec/3600)+'h '+Math.round((sec%3600)/60)+'m'; }
+async function renderProgress(){
+  const prog = document.getElementById('prog');
+  const {ok,status,data} = await api('/api/admin/progress');
+  if (!ok) { prog.innerHTML = '<p class="muted" style="margin-top:1rem">' + (status===403 ? 'Admins only.' : 'Could not load progress.') + '</p>'; return; }
+  const order = ['start','overview','setup','1','2','3','4','5','6','7','8','other'];
+  prog.innerHTML = '<table><tr><th>User</th><th>Edition</th><th>Last seen</th><th>Now on</th><th>Time by module</th><th>Total</th><th>Views</th></tr>' + data.seats.map(s => {
+    const mods = order.filter(k => s.modules[k]).map(k => '<span class="pill" title="'+esc(s.modules[k].label)+' · '+s.modules[k].views+' views · last '+esc(s.modules[k].last||'')+'">'+esc(/^\d$/.test(k)?'M'+k:s.modules[k].label)+' '+dur(s.modules[k].seconds)+'</span>').join(' ');
+    return '<tr><td>'+esc(s.username)+' <span class="muted"><code>'+esc(s.handle)+'</code></span></td><td>'+esc(s.brand)+'</td><td title="'+esc(s.last_seen||'')+'">'+ago(s.last_seen)+'</td>'
+      + '<td>'+(s.current ? esc(s.current.label)+(s.current.title?' <span class="muted">· '+esc(s.current.title).slice(0,60)+'</span>':'') : '<span class="muted">not opened yet</span>')+'</td>'
+      + '<td>'+(mods||'<span class="muted">—</span>')+'</td><td>'+dur(s.total_seconds)+'</td><td>'+s.views+'</td></tr>'; }).join('') + '</table>';
+}
+renderProgress(); setInterval(renderProgress, 60000);
 async function render(){
   const {ok,status,data} = await api('/api/admin/seats');
   if (!ok) { out.innerHTML = '<p class="muted" style="margin-top:1rem">' + (status===403 ? 'Admins only.' : 'Could not load seats.') + '</p>'; return; }
