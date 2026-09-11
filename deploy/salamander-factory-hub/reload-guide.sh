@@ -22,7 +22,9 @@ for p in json.load(sys.stdin)["items"]:
       set -e; cd /showroom/repo
       # the clone is owned by the build-time user; the container runs as an arbitrary uid
       export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="*"
-      git checkout -q -- content/antora.yml
+      # the entrypoint rewrites the playbook with yq (strips blank lines) → a dirty
+      # tree makes the next `git pull` abort; reset both generated files first
+      git checkout -q -- content/antora.yml "${ANTORA_PLAYBOOK:-site.yml}"
       git pull -q
       rev=$(git log -1 --format=%h)
       # 1. the guide itself. The image entrypoint SKIPS the antora build when
