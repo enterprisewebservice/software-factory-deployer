@@ -21,6 +21,20 @@ Nobody is watching when an attendee's cluster is ordered. Every fix goes into th
 
 One Argo CD behaviour to know: when the hook Job fails, the retried Job is built from the manifests of the operation that started, not from a newer commit, while the Job itself clones the branch tip. Chart and role therefore tolerate each other across one revision (for example both names of the runner namespace variable). A clean new order never hits this.
 
+## Where the stages stand (13 October 2026)
+
+| Stage | State on an RHDP order | Notes |
+|---|---|---|
+| operators | works | skips what the base installed; agent-office operator waits for its published catalog |
+| gitea | works | RHPDS gitea-operator, admin + user1..N, per-user orgs, tokens, Secrets, Argo AppProject + ApplicationSet |
+| keycloak_users | works | base realm `sso`: attendees group, `rhdh` and `gitea` OIDC clients, provider roles |
+| rhoai_maas | deferred | LiteMaaS key is captured; the ModelConnection needs the operator's CRD |
+| rhdh | works | chart 1.9.2, OIDC sign-in, Gitea + Argo CD integrations, RBAC, template mirror; custom plugins off until quay.io repos are public |
+| showroom, userinfo | work | one guide per seat; URLs and the workshop password on the order page |
+| agent_platform, seats, verify | not yet | operator catalog must be published first (`quay.io/dpeterso`, operator branch `quay-io-release`) |
+
+Images: everything the workshop needs is mirrored to `quay.io/dpeterso` (map in `docs/mirror-to-quay-io.txt`); the repositories are private until flipped public in the Quay UI.
+
 ## What the first order does
 
 `values.yaml` sets `software_factory_stages: operators,showroom,userinfo`:
