@@ -48,11 +48,37 @@
     name: envoyfilters.networking.istio.io
   register: r_envoyfilter_crd
 
-- name: mcp | RHCL 1.4 workarounds (Authorino TLS, GET /mcp 405)
+- name: mcp | RHCL 1.4 workaround (GET /mcp 405)
   kubernetes.core.k8s:
     state: present
     definition: "{{ lookup('template', 'mcp-gateway-workarounds.yaml.j2') | from_yaml_all | list }}"
   when: r_envoyfilter_crd.resources | length > 0
+
+# Kuadrant declares the shim -> Authorino cluster in plaintext. Where Authorino's gRPC
+# listener runs TLS (the reference cluster) that cluster must be re-declared with a TLS
+# transport socket, or every check fails closed with 500; where Authorino is plaintext
+# (an RHDP order's Kuadrant install) the same override is what breaks it. Follow the
+# Authorino CR.
+- name: mcp | Authorino listener TLS?
+  kubernetes.core.k8s_info:
+    api_version: operator.authorino.kuadrant.io/v1beta1
+    kind: Authorino
+    namespace: kuadrant-system
+  register: r_authorino
+
+- name: mcp | Authorino TLS verdict
+  ansible.builtin.set_fact:
+    _authorino_tls: "{{ (r_authorino.resources | default([]) | map(attribute='spec.listener.tls.enabled', default=false) | select('equalto', true) | list | length) > 0 }}"
+
+- name: mcp | auth cluster over TLS (only where Authorino listens with TLS)
+  kubernetes.core.k8s:
+    state: "{{ (_authorino_tls | bool) | ternary('present', 'absent') }}"
+    definition: "{{ lookup('template', 'mcp-gateway-authn-ssl.yaml.j2') | from_yaml }}"
+  when: r_envoyfilter_crd.resources | length > 0
+
+- name: mcp | auth cluster transport
+  ansible.builtin.debug:
+    msg: "Authorino TLS {{ (_authorino_tls | bool) | ternary('on: TLS override applied', 'off: Kuadrant plaintext cluster kept, override absent') }}"
 
 - name: mcp | broker token for the Gitea MCP server (minted by the gitea stage)
   kubernetes.core.k8s_info:
