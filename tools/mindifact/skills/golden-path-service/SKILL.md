@@ -119,6 +119,24 @@ spec:
         value: docker-build
       - name: kind
         value: pipeline
+  # Requests sized for shared clusters (the build pod must fit beside its workspace volume's
+  # node); limits stay the pipeline's own. Steps named as in the docker-build pipeline's
+  # buildah task.
+  taskRunSpecs:
+    - pipelineTaskName: build-container
+      stepSpecs:
+        - name: build
+          computeResources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "4", memory: 8Gi}
+        - name: push
+          computeResources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {cpu: "1", memory: 4Gi}
+        - name: sbom-syft-generate
+          computeResources:
+            requests: {cpu: 200m, memory: 1Gi}
+            limits: {cpu: "1", memory: 4Gi}
   workspaces:
     - name: workspace
       volumeClaimTemplate:
@@ -132,6 +150,7 @@ spec:
 ```
 
 Replace `SERVICE` with the repository name and `IMAGE` with the full
-image path from the deploy contract. Do not alter anything else —
+image path from the deploy contract. Keep the `taskRunSpecs` block as
+it is: it sizes the build for shared clusters. Do not alter anything else —
 `{{source_url}}`, `{{revision}}`, and `{{ git_auth_secret }}` are
 pipeline placeholders the platform substitutes at run time.
