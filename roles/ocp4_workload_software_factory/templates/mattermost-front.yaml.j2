@@ -47,7 +47,13 @@ data:
         # would hand the dead login page straight back.
         location ^~ /signup/gitlab/ { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
         location ^~ /login/gitlab/  { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
-        location = /sso-login.html { internal; root /opt/app-root/src/site; }
+        location = /sso-login.html {
+          internal; root /opt/app-root/src/site;
+          # Never cacheable: a card the browser kept serving for "/" after the OAuth
+          # sign-in had set the session cookie looked like a sign-in loop (13 Oct 2026).
+          etag off; if_modified_since off; expires -1;
+          add_header Cache-Control "no-store, max-age=0" always;
+        }
 
         # Every other path is the web app: the SPA boots, finds no session
         # and switches to ITS login view client-side, which the server
