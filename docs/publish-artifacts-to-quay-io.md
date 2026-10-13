@@ -1,5 +1,13 @@
 # Publish the workshop's skill artifacts to quay.io (one time, by the owner)
 
+**Done on 13 October 2026** (Dean's go-ahead, run from his signed-in quay.io session and the
+reference cluster): the three repositories exist on `quay.io/dpeterso`, public, with the robot
+`dpeterso+salamander` granted write; `golden-path-service` 1.0.6 is live on mindifact.ai and
+as an OCI artifact on the reference registry; the copy below ran once. Re-run step 2 whenever a
+new artifact version is published on the reference registry (the deployer mirrors whatever
+quay.io holds at order time). The staged credential (`agent-office/quayio-dpeterso-robot` on
+salamander) stays for that.
+
 The deployer's `quay` stage mirrors three artifact repositories from `quay.io/dpeterso` into
 every ordered cluster's own registry (anonymous pull, digests preserved). Those repositories
 exist only on the reference cluster's Quay today, where they are private. Publishing them is
