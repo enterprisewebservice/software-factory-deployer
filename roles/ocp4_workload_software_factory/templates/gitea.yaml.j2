@@ -1,0 +1,29 @@
+# Gitea instance for the RHPDS gitea-operator. Rendered as YAML so integers stay integers
+# (the CRD rejects "2" for giteaUserNumber).
+apiVersion: pfe.rhpds.com/v1
+kind: Gitea
+metadata:
+  name: gitea
+  namespace: {{ gitea_namespace }}
+spec:
+  giteaImage: {{ gitea_image }}
+  giteaImageTag: "{{ gitea_image_tag }}"
+  giteaImagePullPolicy: IfNotPresent
+  giteaVolumeSize: 10Gi
+  postgresqlImage: registry.redhat.io/rhel9/postgresql-16
+  postgresqlImageTag: "latest"
+  postgresqlVolumeSize: 10Gi
+  giteaSsl: true
+  giteaAdminUser: {{ gitea_admin_user }}
+  giteaAdminEmail: {{ gitea_admin_user }}@{{ cluster_domain }}
+  giteaAdminPasswordLength: 20
+  giteaCreateUsers: true
+  giteaUserNumber: {{ num_users | int }}
+  giteaGenerateUserFormat: {{ keycloak_user_prefix }}%d
+  giteaUserPassword: {{ workshop_user_password }}
+  giteaUserEmailDomain: {{ cluster_domain }}
+  giteaDisableRegistration: true
+  giteaEnableCaptcha: false
+  giteaAllowCreateOrganization: true
+  giteaRegisterEmailConfirm: false
+  giteaEnableNotifyMail: false
