@@ -143,7 +143,7 @@
               service: { name: agent-office-plugin, namespace: agent-office-operator, port: 9001, basePath: / }
       loop_control: { label: "{{ item.kind }}" }
 
-    - name: platform | console operator: enabled plugins
+    - name: "platform | console operator: enabled plugins"
       kubernetes.core.k8s_info:
         api_version: operator.openshift.io/v1
         kind: Console

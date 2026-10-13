@@ -1,0 +1,111 @@
+---
+# MCP gateway stage: the governed tool front door (Module 3). Red Hat Connectivity Link
+# (Kuadrant) instance, the Gateway on OpenShift AI's gateway class, the MCP gateway
+# extension, the caller and tool-access policies, the two RHCL 1.4 workarounds, and the
+# Gitea MCP server registered behind it. Ground truth: agent-office/cluster/github-mcp/gateway
+# and the gitea-mcp-server Deployment on the reference cluster. Operators (rhcl-operator,
+# mcp-gateway, authorino, limitador, dns) are already on the cluster; this stage instantiates.
+
+- name: mcp | Kuadrant instance
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - { apiVersion: v1, kind: Namespace, metadata: { name: kuadrant-system } }
+    - apiVersion: kuadrant.io/v1beta1
+      kind: Kuadrant
+      metadata: { name: kuadrant, namespace: kuadrant-system }
+      spec: {}
+  loop_control: { label: "{{ item.kind }}" }
+
+- name: mcp | wait for Kuadrant to be ready
+  kubernetes.core.k8s_info:
+    api_version: kuadrant.io/v1beta1
+    kind: Kuadrant
+    name: kuadrant
+    namespace: kuadrant-system
+  register: r_kuadrant
+  until: >-
+    r_kuadrant.resources | length > 0 and
+    (r_kuadrant.resources[0].status.conditions | default([]) | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) > 0
+  retries: 40
+  delay: 15
+
+- name: mcp | platform namespace
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: "{{ ocp4_workload_software_factory_namespace }}" } }
+
+- name: mcp | Gateway, extension, policies, workarounds
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'mcp-gateway.yaml.j2') | from_yaml_all | list }}"
+
+- name: mcp | broker token for the Gitea MCP server (minted by the gitea stage)
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: gitea-mcp-broker-token
+    namespace: "{{ gitea_namespace }}"
+  register: r_broker
+  no_log: true
+
+- name: mcp | broker token where the registration reads it
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gitea-mcp-broker-token
+        namespace: "{{ ocp4_workload_software_factory_namespace }}"
+        labels:
+          mcp.kuadrant.io/secret: "true"
+          app.kubernetes.io/name: gitea-mcp-server
+          app.kubernetes.io/component: broker-credential
+      type: Opaque
+      data:
+        AUTHORIZATION: "{{ r_broker.resources[0].data.AUTHORIZATION }}"
+  when: r_broker.resources | length > 0
+  no_log: true
+
+- name: mcp | Gitea MCP server (accept-proxy + gitea-mcp-server), route, registration
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'gitea-mcp-server.yaml.j2') | from_yaml_all | list }}"
+
+- name: mcp | seat tokens become gateway caller identities
+  kubernetes.core.k8s:
+    state: patched
+    kind: Secret
+    name: "{{ keycloak_user_prefix }}{{ item }}-gitea-token"
+    namespace: "{{ keycloak_user_prefix }}{{ item }}-agent-workspace"
+    definition:
+      metadata:
+        labels:
+          agentoffice.ai/mcp-gateway-caller: "true"
+          authorino.kuadrant.io/managed-by: authorino
+        annotations:
+          agentoffice.ai/mcp-caller: "seat-{{ keycloak_user_prefix }}{{ item }}"
+          agentoffice.ai/mcp-namespace: "{{ keycloak_user_prefix }}{{ item }}-agent-workspace"
+          agentoffice.ai/mcp-servers: "{{ ocp4_workload_software_factory_namespace }}/gitea"
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  loop_control: { label: "{{ keycloak_user_prefix }}{{ item }}" }
+  failed_when: false
+
+- name: mcp | wait for the Gitea registration to turn Ready
+  kubernetes.core.k8s_info:
+    api_version: mcp.kuadrant.io/v1alpha1
+    kind: MCPServerRegistration
+    name: gitea
+    namespace: "{{ ocp4_workload_software_factory_namespace }}"
+  register: r_gitea_reg
+  until: >-
+    r_gitea_reg.resources | length > 0 and
+    (r_gitea_reg.resources[0].status.conditions | default([]) | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) > 0
+  retries: 40
+  delay: 15
+  failed_when: false
+
+- name: mcp | state
+  ansible.builtin.debug:
+    msg: "MCP gateway mcp-gateway-data-science-gateway-class.{{ ocp4_workload_software_factory_namespace }}.svc; gitea registration ready={{ (r_gitea_reg.resources | default([]) | length) > 0 and ((r_gitea_reg.resources[0].status.conditions | default([]) | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) > 0) }} tools={{ (r_gitea_reg.resources | default([{}]))[0].status.toolCount | default('?') }}"
