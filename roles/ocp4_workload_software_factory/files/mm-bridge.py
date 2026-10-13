@@ -265,6 +265,28 @@ def mm_slug(name):
     return name[:13].rstrip("-._") + "-" + h
 
 
+BOT_TOKENS = {}  # bot user id -> personal access token (one per bridge life)
+
+
+def bot_token(uid):
+    """The bot's access token, minted ONCE per bridge life. Rediscovery rebuilds every
+    agent record every REDISCOVER seconds; minting there left each agent user with a
+    new token per minute, forever (200+ per agent on the reference cluster, found
+    2026-10-13). The first mint also revokes the pile earlier bridge lives left behind."""
+    tok = BOT_TOKENS.get(uid)
+    if tok:
+        return tok
+    st, old = api("GET", f"/api/v4/users/{uid}/tokens?per_page=200")
+    for t in (old or []) if st == 200 else []:
+        if t.get("description") == "bridge":
+            api("POST", "/api/v4/users/tokens/revoke", {"token_id": t["id"]})
+    _, new = api("POST", f"/api/v4/users/{uid}/tokens", {"description": "bridge"})
+    tok = (new or {}).get("token", "")
+    if tok:
+        BOT_TOKENS[uid] = tok
+    return tok
+
+
 def ensure_presence(agent, display, ns, team_id, admin_id):
     """Find the agent's USER + channel (provisioned by the OPERATOR's reconcile)
     and set up the chat record (token + DM + presence WS). Does NOT create —
@@ -276,7 +298,7 @@ def ensure_presence(agent, display, ns, team_id, admin_id):
         return None  # operator hasn't provisioned this agent (yet)
     uid = u["id"]
     set_online(uid)  # keep the green dot lit
-    _, tok = api("POST", f"/api/v4/users/{uid}/tokens", {"description": "bridge"})
+    tok = {"token": bot_token(uid)}
     api("POST", f"/api/v4/teams/{team_id}/members", {"team_id": team_id, "user_id": uid})
     st, ch = api("GET", f"/api/v4/teams/{team_id}/channels/name/{slug}")
     if st != 200:
