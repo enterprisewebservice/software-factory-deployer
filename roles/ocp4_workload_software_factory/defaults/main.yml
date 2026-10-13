@@ -22,7 +22,11 @@ model_desk_image: ghcr.io/berriai/litellm@sha256:20b5044b619055374061a6d5b7b0875
 claude_vertex_project: itpc-gcp-global-revenue-claude
 claude_vertex_location: global
 claude_models:                              # newest permitted first; the hiring form picks the first
+  # Swept live on the work project on 13 Oct 2026 (rawPredict): opus-5, opus-4-8, sonnet-5,
+  # opus-4-6 answer; sonnet-5-1/5-5, opus-5-5, fable-5/5-1, opus-4-7 are 404 (not enabled).
+  - { id: claude-opus-5, name: "Claude Opus 5" }
   - { id: claude-sonnet-5, name: "Claude Sonnet 5" }
+  - { id: claude-opus-4-8, name: "Claude Opus 4.8" }
   - { id: claude-opus-4-6, name: "Claude Opus 4.6" }
 mcp_gateway_channel: preview
 eso_channel: stable
