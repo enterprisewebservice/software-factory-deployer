@@ -1,23 +1,53 @@
 ---
 # Operator installs. Channels/sources mirror the reference cluster (agent-office/cluster/*).
-- name: agent-office-operator CatalogSource
+# Fresh-cluster safe (Field Content base):
+#   - packages that already have a CSV are skipped (the base ships OpenShift GitOps);
+#   - the OpenShift AI operator gets its namespace + OperatorGroup first;
+#   - the agent-office operator is left out until agent_office_catalog_image names a catalog
+#     the cluster can pull (today the images live only in the reference cluster's Quay).
+- name: operators | list installed ClusterServiceVersions
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+  register: r_csv_all
+
+- name: operators | build the subscription list
+  ansible.builtin.set_fact:
+    _installed_csv_names: "{{ r_csv_all.resources | map(attribute='metadata.name') | list | unique }}"
+    _subscriptions: >-
+      {{
+        [
+          {'name': 'openshift-gitops-operator', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': 'latest'},
+          {'name': 'openshift-pipelines-operator-rh', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': 'latest'},
+          {'name': 'rhods-operator', 'ns': 'redhat-ods-operator', 'source': 'redhat-operators', 'channel': 'stable'},
+          {'name': 'external-secrets-operator', 'ns': 'openshift-operators', 'source': 'community-operators', 'channel': eso_channel},
+          {'name': 'mcp-gateway', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': mcp_gateway_channel}
+        ] + ([{'name': 'agent-office-operator', 'ns': 'openshift-operators', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel}]
+             if agent_office_catalog_image | length > 0 else [])
+      }}
+
+- name: operators | agent-office-operator CatalogSource
   kubernetes.core.k8s:
     definition: "{{ lookup('template', 'catalogsource.yml.j2') | from_yaml }}"
   when: agent_office_catalog_image | length > 0
 
-- name: Operator subscriptions
+- name: operators | OpenShift AI operator namespace and OperatorGroup
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - { apiVersion: v1, kind: Namespace, metadata: { name: redhat-ods-operator } }
+    - { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: redhat-ods-operator, namespace: redhat-ods-operator }, spec: {} }
+  loop_control: { label: "{{ item.kind }}" }
+
+- name: operators | subscriptions (skipping packages that already have a CSV)
   kubernetes.core.k8s:
     definition: "{{ lookup('template', 'subscription.yml.j2') | from_yaml }}"
-  loop:
-    - { name: openshift-gitops-operator, ns: openshift-operators, source: redhat-operators, channel: latest }
-    - { name: openshift-pipelines-operator-rh, ns: openshift-operators, source: redhat-operators, channel: latest }
-    - { name: rhods-operator, ns: redhat-ods-operator, source: redhat-operators, channel: stable }
-    - { name: external-secrets-operator, ns: openshift-operators, source: community-operators, channel: "{{ eso_channel }}" }
-    - { name: mcp-gateway, ns: openshift-operators, source: redhat-operators, channel: "{{ mcp_gateway_channel }}" }
-    - { name: agent-office-operator, ns: openshift-operators, source: agent-office-operator-catalog, channel: "{{ agent_office_channel }}" }
+  loop: "{{ _subscriptions }}"
   loop_control: { label: "{{ item.name }}" }
+  when: "_installed_csv_names | select('match', '^' ~ item.name ~ '[.]v') | list | length == 0"
 
-- name: Wait for operator CSVs to succeed
+- name: operators | wait for the CSVs the later stages depend on
   ansible.builtin.include_tasks: wait_for_csv.yml
-  loop: [openshift-gitops-operator, openshift-pipelines-operator-rh, rhods-operator, agent-office-operator]
+  loop: "{{ ['openshift-gitops-operator', 'openshift-pipelines-operator-rh', 'rhods-operator'] + (['agent-office-operator'] if agent_office_catalog_image | length > 0 else []) }}"
   loop_control: { loop_var: csv_operator }

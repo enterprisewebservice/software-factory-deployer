@@ -24,6 +24,14 @@ an optional in-cluster vLLM registers into the same MaaS as the sovereign endpoi
   `KUBECONFIG` points at, no AgnosticD harness needed.
 * `docs/COMPONENTS.md` — what gets installed, from where, and what is reused vs. new.
 
+== Ordering through RHDP (Field Sourced Content)
+
+`field-content/` is the Helm chart that RHDP's *Field Sourced Content - OpenShift Base* item syncs:
+a Job clones this repository and runs `run_local.yml` on the ordered cluster. Order with the
+repository URL, the revision, and path `field-content`; details, the first-order stage set and how
+to read the result are in link:field-content/README.md[field-content/README.md]. Stage selection is
+`software_factory_stages` (see `roles/ocp4_workload_software_factory/defaults/main.yml`).
+
 == Iteration loop
 
 [source,bash]

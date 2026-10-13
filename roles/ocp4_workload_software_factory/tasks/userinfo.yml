@@ -1,0 +1,53 @@
+---
+# RHDP integration: a ConfigMap labelled demo.redhat.com/userinfo is read back by the
+# platform and shown to the person who ordered. Values must be strings.
+- name: userinfo | base data
+  ansible.builtin.set_fact:
+    _userinfo:
+      demo_title: "OpenShift Software Factory - Agents as Staff"
+      access_instructions: "Open your seat's lab guide (showroom_url_userN below) and follow Module 1. Sign in to the console with the userN credentials from this page."
+      openshift_console_url: "{{ _console_url }}"
+      openshift_api_url: "{{ _api_url }}"
+      gitops_url: "{{ _gitops_url }}"
+      cluster_domain: "{{ cluster_domain }}"
+      ocp_version: "{{ _ocp_version }}"
+      num_users: "{{ num_users | string }}"
+      stages_run: "{{ _stages | join(',') }}"
+
+- name: userinfo | add the per-seat guide URLs
+  ansible.builtin.set_fact:
+    _userinfo: "{{ _userinfo | combine({('showroom_url_' ~ item.key): item.value}) }}"
+  loop: "{{ (_showroom_urls | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: userinfo | first seat's guide doubles as the headline URL
+  ansible.builtin.set_fact:
+    _userinfo: "{{ _userinfo | combine({'showroom_url': (_showroom_urls | default({})).get(keycloak_user_prefix ~ '1', 'not-deployed')}) }}"
+
+- name: userinfo | namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ userinfo_namespace }}"
+
+- name: userinfo | ConfigMap for RHDP
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: software-factory-userinfo
+        namespace: "{{ userinfo_namespace }}"
+        labels:
+          demo.redhat.com/userinfo: ""
+          demo.redhat.com/application: software-factory
+      data: "{{ _userinfo }}"
+
+- name: userinfo | published
+  ansible.builtin.debug:
+    msg: "{{ _userinfo }}"

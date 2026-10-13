@@ -1,0 +1,100 @@
+# Field Sourced Content chart: OpenShift Software Factory, Agents as Staff
+#
+# Order "Field Sourced Content - OpenShift Base" in RHDP with:
+#   Git repository URL : https://github.com/enterprisewebservice/software-factory-deployer
+#   Revision           : main   (or the branch under test)
+#   Path               : field-content
+# RHDP's workload merges deployer.{domain,apiUrl}, gitops.*, litemaas.* and multi_user.* into
+# these values; everything else here is ours.
+
+# Job configuration
+job:
+  name: software-factory
+  ttlSecondsAfterFinished: 86400      # keep the finished Job a day so the logs stay readable
+  restartPolicy: Never
+
+# Namespace where the ansible-runner job runs (never openshift-operators)
+namespace:
+  name: software-factory-deployer
+  create: true
+
+ansible:
+  repository:
+    # This repository. The Job clones it and runs run_local.yml from the root, which resolves
+    # roles/ocp4_workload_software_factory and roles/deploy-showroom next to it.
+    url: "https://github.com/enterprisewebservice/software-factory-deployer"
+    branch: "main"
+    path: ""
+  playbook: "run_local.yml"
+
+  requirements:
+    - ansible-core
+    - ansible-runner
+    - kubernetes
+    - openshift
+    - PyYAML
+    - requests
+    - jmespath
+
+  # pinned for the ansible-core 2.15 line the runner image resolves
+  collections:
+    - kubernetes.core:==3.2.0
+    - community.general:==9.5.0
+
+  # Extra variables for the workload. Values must not contain spaces (they ride a shell line).
+  extraVars:
+    ACTION: provision
+    # First RHDP order: operators, the per-seat Showroom guides, and the userinfo ConfigMap.
+    # Add gitea,gitops,rhoai_maas,rhdh,keycloak_users,agent_platform,verify as those stages land.
+    software_factory_stages: "operators,showroom,userinfo"
+    # Empty = the agent-office operator is skipped. Set to a catalog image the ordered cluster
+    # can pull (the reference cluster's images are in its own Quay today).
+    agent_office_catalog_image: ""
+    model_access: maas
+    showroom_content_repo: "https://github.com/enterprisewebservice/showroom-openshift-software-factory.git"
+    showroom_content_ref: "main"
+    showroom_seat_mode: "static"
+
+# Container configuration (the image RHDP tested the template with)
+image:
+  repository: registry.redhat.io/ubi8/python-39
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+
+serviceAccount:
+  name: software-factory-deployer
+  annotations: {}
+
+# The workload needs cluster scope (namespaces, Subscriptions, CatalogSources, IdP config, SCCs)
+rbac:
+  create: true
+  clusterRole: cluster-admin
+
+# Sync waves: RBAC first, then the Job
+syncWave:
+  rbac: "1"
+  job: "2"
+
+# ------------------------------------------------------------------
+# Injected by the RHDP field-content workload (do not set by hand)
+# ------------------------------------------------------------------
+deployer:
+  domain: ""
+  apiUrl: ""
+
+# The repository URL and revision of the order; the Job clones exactly these.
+gitops:
+  repoURL: ""
+  revision: ""
+  path: ""
+
+# litemaas: {enabled, apiUrl, apiKey, model}  -> Secret field-content-litemaas + MaaS provider vars
+# multi_user: {num_users, users[]}            -> num_users for the workload (default 5 when absent)

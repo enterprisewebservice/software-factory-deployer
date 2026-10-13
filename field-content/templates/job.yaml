@@ -1,0 +1,161 @@
+---
+# ansible-runner Job (RHDP field-sourced-content template pattern), extended to pass the
+# RHDP-injected multi_user and litemaas values to the workload as variables.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ansible-runner.fullname" . }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "ansible-runner.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWave.job | quote }}
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  {{- if gt (.Values.job.ttlSecondsAfterFinished | int) 0 }}
+  ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+  {{- end }}
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "ansible-runner.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      restartPolicy: {{ .Values.job.restartPolicy }}
+      containers:
+      - name: ansible-runner
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        # Cluster information (injected by the field content workload)
+        - name: CLUSTER_DOMAIN
+          value: "{{ .Values.deployer.domain }}"
+        - name: CLUSTER_API_URL
+          value: "{{ .Values.deployer.apiUrl }}"
+        - name: ANSIBLE_CONFIG
+          value: "/tmp/ansible/ansible.cfg"
+        - name: KUBECONFIG
+          value: "/tmp/ansible/kubeconfig"
+        # Clone the same repository and revision RHDP was given (gitops.* is injected by the
+        # field-content workload); fall back to the values for local renders.
+        - name: GIT_REPO_URL
+          value: {{ .Values.gitops.repoURL | default .Values.ansible.repository.url | quote }}
+        - name: GIT_REPO_BRANCH
+          value: {{ .Values.gitops.revision | default .Values.ansible.repository.branch | quote }}
+        - name: PLAYBOOK_PATH
+          value: {{ .Values.ansible.playbook | quote }}
+        - name: NAMESPACE
+          value: {{ .Values.namespace.name | quote }}
+        {{- if .Values.ansible.repository.secretName }}
+        - name: GIT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.ansible.repository.secretName }}
+              key: username
+        - name: GIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.ansible.repository.secretName }}
+              key: password
+        {{- end }}
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "=== Software Factory deployer Job ==="
+          echo "Repository: $GIT_REPO_URL ($GIT_REPO_BRANCH), playbook: $PLAYBOOK_PATH, namespace: $NAMESPACE"
+
+          mkdir -p /tmp/ansible
+          cd /tmp/ansible
+
+          echo "=== Installing Python packages ==="
+          pip install --quiet --upgrade pip
+          pip install --quiet -r /config/requirements.txt
+
+          echo "=== Installing Helm (showroom stage) ==="
+          curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz -C /tmp
+          mv /tmp/linux-amd64/helm /opt/app-root/bin/
+          helm version --short
+
+          echo "=== Installing Ansible collections ==="
+          while read collection; do
+            [ -z "$collection" ] || ansible-galaxy collection install "$collection" --force
+          done < /config/collections.txt
+
+          cp /config/ansible.cfg /tmp/ansible/
+          cp /config/inventory.yaml /tmp/ansible/
+
+          echo "=== Creating kubeconfig from the service account ==="
+          cat > /tmp/ansible/kubeconfig << 'KUBECONFIG_EOF'
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: default
+            cluster:
+              certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              server: https://kubernetes.default.svc
+          contexts:
+          - name: default
+            context:
+              cluster: default
+              user: default
+          current-context: default
+          users:
+          - name: default
+            user:
+              tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+          KUBECONFIG_EOF
+
+          echo "=== Cloning the deployer repository ==="
+          {{- if .Values.ansible.repository.secretName }}
+          git clone --branch ${GIT_REPO_BRANCH} \
+            https://${GIT_USERNAME}:${GIT_PASSWORD}@$(echo ${GIT_REPO_URL} | sed 's|https://||') \
+            /tmp/ansible/playbooks
+          {{- else }}
+          git clone --branch ${GIT_REPO_BRANCH} ${GIT_REPO_URL} /tmp/ansible/playbooks
+          {{- end }}
+          {{- if .Values.ansible.repository.path }}
+          cd /tmp/ansible/playbooks/{{ .Values.ansible.repository.path }}
+          {{- else }}
+          cd /tmp/ansible/playbooks
+          {{- end }}
+
+          if [ -f requirements.yml ]; then
+            ansible-galaxy install -r requirements.yml
+          fi
+          if [ -f requirements.txt ]; then
+            pip install --quiet -r requirements.txt
+          fi
+
+          EXTRA_VARS="cluster_domain=${CLUSTER_DOMAIN} cluster_api_url=${CLUSTER_API_URL} namespace=${NAMESPACE}"
+          {{- range $key, $value := .Values.ansible.extraVars }}
+          EXTRA_VARS="$EXTRA_VARS {{ $key }}={{ $value }}"
+          {{- end }}
+          {{- if .Values.multi_user }}
+          EXTRA_VARS="$EXTRA_VARS num_users={{ .Values.multi_user.num_users | default 1 }}"
+          {{- end }}
+          {{- if and .Values.litemaas .Values.litemaas.enabled }}
+          EXTRA_VARS="$EXTRA_VARS maas_external_provider_url={{ .Values.litemaas.apiUrl }} maas_external_provider_secret=field-content-litemaas maas_external_provider_model={{ .Values.litemaas.model }}"
+          {{- end }}
+
+          echo "=== Running the workload ==="
+          echo "Extra vars: $EXTRA_VARS"
+          ansible-playbook \
+            -i /tmp/ansible/inventory.yaml \
+            --extra-vars "$EXTRA_VARS" \
+            -v \
+            ${PLAYBOOK_PATH}
+          echo "=== Workload Job completed ==="
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "ansible-runner.fullname" . }}-config

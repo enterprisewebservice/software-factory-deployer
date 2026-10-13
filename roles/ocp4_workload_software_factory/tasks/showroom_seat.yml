@@ -1,0 +1,24 @@
+---
+- name: "showroom | seat {{ keycloak_user_prefix }}{{ _seat_n }}"
+  ansible.builtin.include_role:
+    name: deploy-showroom
+  vars:
+    showroom_guid: "{{ keycloak_user_prefix }}{{ _seat_n }}"
+    showroom_deployer_domain: "{{ cluster_domain }}"
+    showroom_content_git_repo: "{{ showroom_content_repo }}"
+    showroom_content_git_repo_ref: "{{ showroom_content_ref }}"
+    showroom_user_data:
+      user: "{{ keycloak_user_prefix }}{{ _seat_n }}"
+      password: "{{ keycloak_user_password if (keycloak_user_password | length > 0) else 'ask-your-instructor' }}"
+      seat_mode: "{{ showroom_seat_mode }}"
+      openshift_console_url: "{{ _console_url }}"
+      openshift_api_url: "{{ _api_url }}"
+      gitops_url: "{{ _gitops_url }}"
+      devhub_url: "{{ _devhub_url | default('not-deployed-yet') }}"
+      mattermost_url: "{{ _mattermost_url | default('not-deployed-yet') }}"
+      gitea_url: "{{ _gitea_url | default('not-deployed-yet') }}"
+      ocp_version: "{{ _ocp_minor }}"
+
+- name: "showroom | record the guide URL for {{ keycloak_user_prefix }}{{ _seat_n }}"
+  ansible.builtin.set_fact:
+    _showroom_urls: "{{ _showroom_urls | default({}) | combine({(keycloak_user_prefix ~ _seat_n): showroom_url}) }}"

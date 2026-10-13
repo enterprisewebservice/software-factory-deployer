@@ -1,0 +1,11 @@
+apiVersion: v2
+name: software-factory
+description: >-
+  Field Sourced Content chart for the "OpenShift Software Factory - Agents as Staff" workshop.
+  An ansible-runner Job clones this repository and runs the ocp4_workload_software_factory
+  workload against the ordered cluster (RHDP hybrid pattern: Helm for the Job, Ansible for the work).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Dean Peterson

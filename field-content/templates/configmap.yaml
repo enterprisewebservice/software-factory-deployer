@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ansible-runner.fullname" . }}-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "ansible-runner.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWave.rbac | quote }}
+data:
+  # Ansible configuration
+  ansible.cfg: |
+    [defaults]
+    host_key_checking = False
+    stdout_callback = default
+    retry_files_enabled = False
+    log_path = /tmp/ansible.log
+    interpreter_python = auto_silent
+
+    [ssh_connection]
+    pipelining = True
+
+  # Python requirements for Ansible
+  requirements.txt: |
+    {{- range .Values.ansible.requirements }}
+    {{ . }}
+    {{- end }}
+
+  # Ansible collections to install
+  collections.txt: |
+    {{- range .Values.ansible.collections }}
+    {{ . }}
+    {{- end }}
+
+  # Inventory for local execution (connecting to Kubernetes API)
+  inventory.yaml: |
+    all:
+      hosts:
+        localhost:
+          ansible_connection: local
+          ansible_python_interpreter: "{{ "{{" }} ansible_playbook_python {{ "}}" }}"

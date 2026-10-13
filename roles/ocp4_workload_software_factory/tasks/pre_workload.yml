@@ -1,11 +1,36 @@
 ---
-- name: Verify cluster is reachable and collect version
+- name: pre | verify cluster is reachable and collect version
   kubernetes.core.k8s_info:
     api_version: config.openshift.io/v1
     kind: ClusterVersion
     name: version
   register: r_cv
-- name: Assert supported OpenShift version
+
+- name: pre | assert supported OpenShift version
   ansible.builtin.assert:
     that: r_cv.resources | length == 1
     fail_msg: "Cluster not reachable with current credentials"
+
+- name: pre | cluster ingress domain and API URL
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: "{{ item }}"
+    name: cluster
+  loop: [Ingress, Infrastructure]
+  register: r_cluster_cfg
+
+- name: pre | derived cluster facts
+  ansible.builtin.set_fact:
+    cluster_domain: "{{ cluster_domain if (cluster_domain | default('') | length > 0) else r_cluster_cfg.results[0].resources[0].spec.domain }}"
+    _api_url: "{{ cluster_api_url if (cluster_api_url | default('') | length > 0) else r_cluster_cfg.results[1].resources[0].status.apiServerURL }}"
+    _ocp_version: "{{ r_cv.resources[0].status.desired.version }}"
+    _ocp_minor: "{{ r_cv.resources[0].status.desired.version.split('.')[0:2] | join('.') }}"
+
+- name: pre | well-known URLs
+  ansible.builtin.set_fact:
+    _console_url: "https://console-openshift-console.{{ cluster_domain }}"
+    _gitops_url: "https://openshift-gitops-server-openshift-gitops.{{ cluster_domain }}"
+
+- name: pre | cluster
+  ansible.builtin.debug:
+    msg: "OpenShift {{ _ocp_version }}, apps domain {{ cluster_domain }}, API {{ _api_url }}"
