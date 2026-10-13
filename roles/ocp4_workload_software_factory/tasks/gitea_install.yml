@@ -90,6 +90,79 @@
     _gitea_admin_password: "{{ r_gitea_status.resources[0].status.adminPassword }}"
   no_log: true
 
+# The operator renders app.ini with the OAuth2 provider OFF, and Mattermost signs attendees
+# in through Gitea's OAuth2 (the authorize endpoint answers 403 while it is off). The
+# operator's hook for a custom app.ini is spec.giteaConfigMapName (+ giteaHostname, which
+# it insists on): the rendered config is copied once with [oauth2] ENABLED = true and the
+# instance is pointed at the copy, exactly the reference cluster's shape
+# (gitea-config-factory). Idempotent: an instance already on the copy is left alone.
+- name: gitea install | instance already on the OAuth2-enabled config?
+  ansible.builtin.set_fact:
+    _gitea_oauth2_done: "{{ (r_gitea_status.resources[0].spec.giteaConfigMapName | default('')) == 'gitea-config-factory' }}"
+
+- name: gitea install | OAuth2-enabled config
+  when: not (_gitea_oauth2_done | bool)
+  block:
+    - name: gitea install | the operator-rendered app.ini
+      kubernetes.core.k8s_info:
+        kind: ConfigMap
+        name: gitea-config
+        namespace: "{{ gitea_namespace }}"
+      register: r_gitea_cm
+      no_log: true
+
+    - name: gitea install | the same app.ini with the OAuth2 provider on
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: gitea-config-factory
+            namespace: "{{ gitea_namespace }}"
+            labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+          data:
+            app.ini: "{{ r_gitea_cm.resources[0].data['app.ini'] | replace('[oauth2]\nENABLED = false', '[oauth2]\nENABLED = true') }}"
+      no_log: true
+
+    - name: gitea install | point the instance at it
+      kubernetes.core.k8s:
+        state: patched
+        api_version: pfe.rhpds.com/v1
+        kind: Gitea
+        name: gitea
+        namespace: "{{ gitea_namespace }}"
+        definition:
+          spec:
+            giteaConfigMapName: gitea-config-factory
+            giteaHostname: "{{ gitea_host }}"
+
+    - name: gitea install | wait for the instance to roll onto the OAuth2-enabled config
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: gitea
+        namespace: "{{ gitea_namespace }}"
+      register: r_gitea_dep
+      until: >-
+        r_gitea_dep.resources | length > 0 and
+        (r_gitea_dep.resources[0].spec.template.spec.volumes | selectattr('name', 'equalto', 'gitea-config') | map(attribute='configMap.name') | first | default('')) == 'gitea-config-factory' and
+        (r_gitea_dep.resources[0].status.readyReplicas | default(0)) | int >= 1 and
+        (r_gitea_dep.resources[0].status.unavailableReplicas | default(0)) | int == 0
+      retries: 60
+      delay: 10
+
+- name: gitea install | OAuth2 authorize endpoint answers (303 to sign-in, never 403)
+  ansible.builtin.uri:
+    url: "https://{{ gitea_host }}/login/oauth/authorize?response_type=code&client_id=probe&redirect_uri=https://{{ gitea_host }}/&state=x&scope=read:user"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 303, 302, 400]
+  register: r_gitea_oauth_probe
+  retries: 12
+  delay: 10
+  until: r_gitea_oauth_probe.status != 403
+
 # gitea.yml reads the admin password from this Secret (the reference cluster's shape)
 - name: gitea install | admin credentials Secret for the configure stage
   kubernetes.core.k8s:
