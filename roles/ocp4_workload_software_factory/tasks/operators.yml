@@ -41,7 +41,9 @@
           {'name': 'rhods-operator', 'ns': 'redhat-ods-operator', 'source': 'redhat-operators', 'channel': 'stable'},
           {'name': 'external-secrets-operator', 'ns': 'openshift-operators', 'source': 'community-operators', 'channel': eso_channel},
           {'name': 'mcp-gateway', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': mcp_gateway_channel}
-        ] + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel, 'env': _agent_office_env}]
+        ] + ([{'name': 'quay-operator', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': quay_operator_channel}]
+             if 'quay' in _stages else [])
+          + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel, 'env': _agent_office_env}]
              if agent_office_catalog_image | length > 0 else [])
       }}
 
@@ -128,5 +130,11 @@
 # its owner's responsibility; blocking on it would turn their failure into ours.
 - name: operators | wait for the CSVs of the subscriptions this run created
   ansible.builtin.include_tasks: wait_for_csv.yml
-  loop: "{{ ['openshift-gitops-operator', 'openshift-pipelines-operator-rh', 'rhods-operator', 'agent-office-operator'] | reject('in', _installed_packages) | select('in', _subscriptions | map(attribute='name') | list) | list }}"
+  loop: "{{ ['openshift-gitops-operator', 'openshift-pipelines-operator-rh', 'rhods-operator', 'quay-operator', 'agent-office-operator'] | reject('in', _installed_packages) | select('in', _subscriptions | map(attribute='name') | list) | list }}"
   loop_control: { loop_var: csv_operator }
+
+# The registry instance goes in now so postgres, redis, the bucket and the app initialise
+# while the next stages run; the quay stage waits for it.
+- name: operators | registry instance (the quay stage configures it later)
+  ansible.builtin.include_tasks: quay_instance.yml
+  when: "'quay' in _stages"

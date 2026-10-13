@@ -1,0 +1,92 @@
+---
+# The registry instance: namespace, config bundle, QuayRegistry. Created by the operators stage
+# as soon as the Quay operator is up and re-applied by the quay stage for stand-alone runs.
+# Both objects are created once and never re-applied: the operator rewrites parts of the
+# QuayRegistry (and may re-point configBundleSecret), and re-applying would fight it.
+- name: quay | object-storage prerequisite (the operator's managed storage is a NooBaa bucket claim)
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: objectbucketclaims.objectbucket.io
+  register: r_quay_obc_crd
+
+- name: quay | the cluster can back a registry
+  ansible.builtin.assert:
+    that: r_quay_obc_crd.resources | length > 0
+    fail_msg: >-
+      No objectbucketclaims.objectbucket.io API: the Quay operator's managed object storage needs
+      OpenShift Data Foundation with NooBaa. Order the cluster size that includes ODF, or set
+      software_factory_stages without quay (Modules 4 exercise 2 and 6 then lose the registry).
+
+- name: quay | existing instance objects
+  kubernetes.core.k8s_info:
+    api_version: "{{ item.api }}"
+    kind: "{{ item.kind }}"
+    name: "{{ item.name }}"
+    namespace: "{{ quay_namespace }}"
+  loop:
+    - { api: v1, kind: Secret, name: quay-config-bundle }
+    - { api: quay.redhat.com/v1, kind: QuayRegistry, name: "{{ quay_registry_name }}" }
+  loop_control: { label: "{{ item.kind }}/{{ item.name }}" }
+  register: r_quay_existing
+  failed_when: false
+
+- name: quay | components
+  ansible.builtin.set_fact:
+    _quay_components: >-
+      {{
+        [{'kind': 'quay', 'managed': true, 'overrides': {'replicas': 1}},
+         {'kind': 'postgres', 'managed': true},
+         {'kind': 'objectstorage', 'managed': true},
+         {'kind': 'redis', 'managed': true},
+         {'kind': 'route', 'managed': true},
+         {'kind': 'tls', 'managed': true},
+         {'kind': 'clair', 'managed': quay_clair | bool},
+         {'kind': 'clairpostgres', 'managed': quay_clair | bool},
+         {'kind': 'horizontalpodautoscaler', 'managed': false},
+         {'kind': 'mirror', 'managed': false},
+         {'kind': 'monitoring', 'managed': false}]
+      }}
+
+- name: quay | namespace
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: "{{ quay_namespace }}" } }
+
+# FEATURE_USER_INITIALIZE lets the first API call create the superuser (quay.yml); user
+# self-registration stays off; robots and the superuser's API token are the only identities.
+- name: quay | config bundle (once)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: quay-config-bundle
+        namespace: "{{ quay_namespace }}"
+        labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+      type: Opaque
+      stringData:
+        config.yaml: |
+          FEATURE_USER_INITIALIZE: true
+          FEATURE_USER_CREATION: false
+          FEATURE_ANONYMOUS_ACCESS: true
+          FEATURE_GENERAL_OCI_SUPPORT: true
+          SUPER_USERS:
+            - {{ quay_superuser }}
+  when: (r_quay_existing.results[0].resources | default([])) | length == 0
+
+- name: quay | QuayRegistry {{ quay_registry_name }} (once)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: quay.redhat.com/v1
+      kind: QuayRegistry
+      metadata:
+        name: "{{ quay_registry_name }}"
+        namespace: "{{ quay_namespace }}"
+        labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+      spec:
+        configBundleSecret: quay-config-bundle
+        components: "{{ _quay_components }}"
+  when: (r_quay_existing.results[1].resources | default([])) | length == 0

@@ -182,3 +182,13 @@
     - name: platform | ready
       ansible.builtin.debug:
         msg: "operator from {{ agent_office_catalog_image }} ready; console plugin {{ agent_office_console_plugin_image }} enabled"
+
+# Module 6 scenery: the orders API the dev agent's service reads ("a system IT exposed years
+# ago"), the reference cluster's supply-chain demo vendored under files/supply-chain. Plain
+# stdlib Python over a seeded dataset with a fixed as-of date.
+- name: platform | orders-api sample service (Module 6 reads it)
+  kubernetes.core.k8s:
+    state: present
+    namespace: "{{ ocp4_workload_software_factory_namespace }}"
+    src: "{{ role_path }}/files/supply-chain/{{ item }}"
+  loop: [orders-api-data.yaml, orders-api.yaml]

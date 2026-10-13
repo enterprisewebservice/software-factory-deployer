@@ -81,7 +81,7 @@ keycloak_user_password: ""            # generated per-order (lookup('password', 
 
 # Stage selection. A list, or a comma-separated string when passed as an extra-var (the Field
 # Content Job does that). The first RHDP order runs: operators,showroom,userinfo
-software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, seats, mcp_gateway, model_desk, showroom, verify, userinfo]
+software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, quay, seats, mcp_gateway, model_desk, showroom, verify, userinfo]
 cluster_domain: ""                    # derived from ingresses.config.openshift.io/cluster when empty
 
 # Showroom: one lab guide per seat (user1..N), the RHDP multi-user model
@@ -127,3 +127,29 @@ mattermost_host: "mattermost-mattermost.{{ cluster_domain }}"
 mattermost_admin_user: agentadmin
 bridge_guardrails_url: ""             # no guardrails service on a workshop cluster: the bridge relays unguarded
 bridge_guardrails_fail_closed: "false"
+
+# --- The cluster's own registry (Red Hat Quay) and the supply-chain lane -------------------
+# Module 4 inspects skill artifacts in "the cluster's own container registry" and Module 6
+# pushes the dev agent's image there, where Tekton Chains signs it. The operators stage
+# subscribes the Quay operator and creates the instance (postgres, redis, a NooBaa bucket,
+# route and TLS all operator-managed) so it initialises while the other stages run; the quay
+# stage waits for it, creates the superuser, one organization, the robot accounts, mirrors the
+# workshop's skill artifacts from their public home and keys Tekton Chains.
+quay_operator_channel: stable-3.18
+quay_namespace: registry
+quay_registry_name: quay                # managed route host: <name>-quay-<namespace>.<cluster_domain>
+quay_org: workshop                      # one organization: mirrored artifacts and every seat's images
+quay_superuser: quayadmin
+quay_clair: false                       # Clair (vulnerability scanning) pods; the lab's scans run in the pipeline
+quay_registry_endpoint_timeout: 1800    # seconds to wait for the registry endpoint
+artifact_mirror_source: quay.io/dpeterso    # public home of the workshop's skill artifacts (digests preserved)
+artifact_mirror_repos:
+  - agent-office-skill-platform-incident-triage
+  - agent-office-pack-supply-chain-ops
+  - agent-office-skill-golden-path-service
+skopeo_image: quay.io/skopeo/stable@sha256:97772f3c64fd2fba720b2bafaf37239dc44d8b1c625c8383c64044832efe9ed9   # v1.22.3
+pipelines_namespace: openshift-pipelines
+cosign_python: python3                  # interpreter carrying cryptography + pynacl (the Job installs both)
+# The guide's defaults when the registry stage did not run (the reference cluster's values).
+reference_artifact_registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
+reference_registry_org: deanpeterson

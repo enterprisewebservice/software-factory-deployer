@@ -1,0 +1,166 @@
+# Vendored from agent-office manifests/supply-chain-demo/orders-api (namespace set by the task).
+# orders-api — the "endpoint IT gave Morgan years ago" (supply-chain demo scenery).
+# Deliberately plain: stdlib-Python REST over seeded JSON, no build, no dependencies.
+# Ages ("stuck > N days") are computed against the dataset's fixed AS_OF business date,
+# never the wall clock, so demo assertions stay stable forever.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orders-api-app
+  labels:
+    app: orders-api
+    app.kubernetes.io/part-of: supply-chain-demo
+data:
+  app.py: |
+    #!/usr/bin/env python3
+    """orders-api: read-only order lookups over seeded data (stdlib only).
+
+    GET /healthz                 -> {ok, as_of, orders}
+    GET /meta                    -> statuses, regions, count, as_of
+    GET /orders                  -> filters: status, region, customer, sku,
+                                    since, until (ISO date), limit (<=500), offset
+    GET /orders/<id>             -> one order
+    """
+    import json
+    from datetime import datetime
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import urlparse, parse_qs
+
+    with open("/data/orders.json") as fh:
+        DB = json.load(fh)
+    ORDERS = DB["orders"]
+    BY_ID = {o["id"]: o for o in ORDERS}
+    AS_OF = DB["as_of"]
+
+    def parse_ts(ts):
+        return datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")
+
+    class H(BaseHTTPRequestHandler):
+        server_version = "orders-api/1.0"
+
+        def _send(self, code, obj):
+            body = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, fmt, *args):  # quiet probes
+            pass
+
+        def do_GET(self):
+            u = urlparse(self.path)
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if u.path == "/healthz":
+                return self._send(200, {"ok": True, "as_of": AS_OF, "orders": len(ORDERS)})
+            if u.path == "/meta":
+                return self._send(200, {
+                    "as_of": AS_OF, "count": len(ORDERS),
+                    "statuses": sorted({o["status"] for o in ORDERS}),
+                    "regions": sorted({o["region"] for o in ORDERS})})
+            if u.path.startswith("/orders/"):
+                o = BY_ID.get(u.path.rsplit("/", 1)[1])
+                return self._send(200, o) if o else self._send(404, {"error": "not found"})
+            if u.path == "/orders":
+                rows = ORDERS
+                if "status" in q:
+                    rows = [o for o in rows if o["status"] == q["status"]]
+                if "region" in q:
+                    rows = [o for o in rows if o["region"] == q["region"]]
+                if "customer" in q:
+                    rows = [o for o in rows if q["customer"].lower() in o["customer"].lower()]
+                if "sku" in q:
+                    rows = [o for o in rows if o["sku"] == q["sku"]]
+                if "since" in q:
+                    rows = [o for o in rows if parse_ts(o["ordered_at"]) >= parse_ts(q["since"] + "T00:00:00")]
+                if "until" in q:
+                    rows = [o for o in rows if parse_ts(o["ordered_at"]) <= parse_ts(q["until"] + "T23:59:59")]
+                try:
+                    offset = max(0, int(q.get("offset", 0)))
+                    limit = min(500, max(1, int(q.get("limit", 100))))
+                except ValueError:
+                    return self._send(400, {"error": "bad limit/offset"})
+                page = rows[offset:offset + limit]
+                return self._send(200, {"as_of": AS_OF, "total": len(rows),
+                                        "offset": offset, "returned": len(page), "orders": page})
+            return self._send(404, {"error": "no such path"})
+
+    if __name__ == "__main__":
+        ThreadingHTTPServer(("0.0.0.0", 8080), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+  labels:
+    app: orders-api
+    app.kubernetes.io/part-of: supply-chain-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders-api
+  template:
+    metadata:
+      labels:
+        app: orders-api
+        app.kubernetes.io/part-of: supply-chain-demo
+    spec:
+      containers:
+        - name: orders-api
+          image: registry.access.redhat.com/ubi9/python-311:latest
+          command: ["python3", "/app/app.py"]
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: data, mountPath: /data, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 25m, memory: 128Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+      volumes:
+        - name: app
+          configMap: {name: orders-api-app}
+        - name: data
+          configMap: {name: orders-api-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-api
+  labels:
+    app: orders-api
+    app.kubernetes.io/part-of: supply-chain-demo
+spec:
+  selector:
+    app: orders-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: orders-api
+  labels:
+    app: orders-api
+    app.kubernetes.io/part-of: supply-chain-demo
+spec:
+  to:
+    kind: Service
+    name: orders-api
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

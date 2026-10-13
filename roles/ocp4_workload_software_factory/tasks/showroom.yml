@@ -3,6 +3,10 @@
 # deploy-showroom role from RHDP's field-sourced-content template (roles/deploy-showroom).
 # Attributes for components a partial run has not deployed carry plain-word placeholders:
 # angle brackets reach the built HTML unescaped and browsers swallow them (seen 2026-08-25).
+- name: showroom | the cluster's registry, for the guide's registry attributes
+  ansible.builtin.include_tasks: registry_facts.yml
+  when: _artifact_registry is not defined
+
 - name: showroom | per-seat guides
   ansible.builtin.include_tasks: showroom_seat.yml
   loop: "{{ range(1, num_users | int + 1) | list }}"

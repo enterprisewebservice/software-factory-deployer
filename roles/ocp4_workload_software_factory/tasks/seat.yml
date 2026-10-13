@@ -140,3 +140,166 @@
     - { name: mm-bridge, role: mm-bridge-seat, subject: { kind: ServiceAccount, name: mm-bridge, namespace: "{{ ocp4_workload_software_factory_namespace }}" } }
   loop_control: { label: "{{ item.name }}" }
   when: (r_seat_croles.results | selectattr('item', 'equalto', item.role) | first).resources | length > 0
+
+# ---- Module 6's lane: registry credentials, signing key copy, Pipelines-as-Code webhook -----------
+# Present only once the quay stage has run (the robots' Secrets exist); the Gitea webhook only once
+# Pipelines-as-Code is installed. Each piece is idempotent and keeps what an earlier run created.
+- name: "seat {{ _seat }} | registry robots from the quay stage"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: "{{ item }}"
+    namespace: "{{ quay_namespace }}"
+  loop: ["{{ _seat }}-quay-robot", quay-pull-robot]
+  register: r_seat_robots
+  failed_when: false
+  no_log: true
+
+- name: "seat {{ _seat }} | registry credentials present?"
+  ansible.builtin.set_fact:
+    _seat_push_doc: "{{ ((r_seat_robots.results[0].resources | default([{}]))[0].data | default({}))['.dockerconfigjson'] | default('') }}"
+    _seat_pull_doc: "{{ ((r_seat_robots.results[1].resources | default([{}]))[0].data | default({}))['.dockerconfigjson'] | default('') }}"
+  no_log: true
+
+- name: "seat {{ _seat }} | registry credentials: push is the seat's own robot, pull the shared read robot"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ item.name }}"
+        namespace: "{{ _seat_ns }}"
+        labels: { software-factory.redhat.com/seat: "{{ _seat }}", app.kubernetes.io/managed-by: software-factory-deployer }
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ item.doc }}"
+  loop:
+    - { name: quay-push-secret, doc: "{{ _seat_push_doc }}" }
+    - { name: quay-pull-secret, doc: "{{ _seat_pull_doc }}" }
+  loop_control: { label: "{{ item.name }}" }
+  when: _seat_push_doc | length > 0 and _seat_pull_doc | length > 0
+  no_log: true
+
+- name: "seat {{ _seat }} | service accounts as they are"
+  kubernetes.core.k8s_info:
+    kind: ServiceAccount
+    name: "{{ item }}"
+    namespace: "{{ _seat_ns }}"
+  loop: [pipeline, default]
+  register: r_seat_sas
+  when: _seat_push_doc | length > 0 and _seat_pull_doc | length > 0
+
+# pipeline (Pipelines-as-Code runs the build with it) pushes with the seat's robot and Tekton
+# Chains signs with the same credential; default pulls the shipped image. Lists are unioned with
+# what is there: the Pipelines operator's own entries stay.
+- name: "seat {{ _seat }} | service accounts carry the registry credentials"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata: { name: "{{ item.name }}", namespace: "{{ _seat_ns }}" }
+      secrets: "{{ (item.current.secrets | default([])) + ([{'name': item.secret}] if item.secret not in (item.current.secrets | default([]) | map(attribute='name') | list) and item.link_secret else []) }}"
+      imagePullSecrets: "{{ (item.current.imagePullSecrets | default([])) + ([{'name': item.secret}] if item.secret not in (item.current.imagePullSecrets | default([]) | map(attribute='name') | list) else []) }}"
+  loop:
+    - { name: pipeline, secret: quay-push-secret, link_secret: true, current: "{{ ((r_seat_sas.results | default([{}]))[0].resources | default([{}]))[0] | default({}) }}" }
+    - { name: default, secret: quay-pull-secret, link_secret: false, current: "{{ ((r_seat_sas.results | default([{}, {}]))[1].resources | default([{}]))[0] | default({}) }}" }
+  loop_control: { label: "{{ item.name }} <- {{ item.secret }}" }
+  when: _seat_push_doc | length > 0 and _seat_pull_doc | length > 0
+
+- name: "seat {{ _seat }} | Tekton Chains public key (the guide's verify step reads it here)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: chains-public-key
+        namespace: "{{ _seat_ns }}"
+        labels: { software-factory.redhat.com/seat: "{{ _seat }}", app.kubernetes.io/managed-by: software-factory-deployer }
+      data:
+        cosign.pub: "{{ _chains_pub }}"
+  when: (_chains_pub | default('')) | length > 0
+
+- name: "seat {{ _seat }} | Pipelines-as-Code webhook secret, if stored"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: pac-gitea-webhook
+    namespace: "{{ _seat_ns }}"
+  register: r_seat_pac_secret
+  no_log: true
+
+- name: "seat {{ _seat }} | webhook secret (kept across runs)"
+  ansible.builtin.set_fact:
+    _seat_pac_secret: "{{ (r_seat_pac_secret.resources[0].data.secret | b64decode) if r_seat_pac_secret.resources | length > 0 else lookup('ansible.builtin.password', '/dev/null', length=48, chars=['ascii_letters', 'digits']) }}"
+  no_log: true
+
+- name: "seat {{ _seat }} | Secret pac-gitea-webhook (the Repository the attendee applies names it)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: pac-gitea-webhook
+        namespace: "{{ _seat_ns }}"
+        labels: { software-factory.redhat.com/seat: "{{ _seat }}", app.kubernetes.io/managed-by: software-factory-deployer }
+      type: Opaque
+      stringData:
+        secret: "{{ _seat_pac_secret }}"
+  when: r_seat_pac_secret.resources | length == 0
+  no_log: true
+
+# The org-level webhook: every repository the attendee's org ever holds reports to
+# Pipelines-as-Code, which matches events to Repository resources in the seat namespace. Created
+# once; its secret is re-synced to the Secret above on every run.
+- name: "seat {{ _seat }} | webhooks on the Gitea org"
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/orgs/{{ _seat }}{{ gitea_user_org_suffix }}/hooks"
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 404]
+  register: r_seat_hooks
+  when: (_pac_controller_url | default('')) | length > 0 and _gitea_api is defined
+  no_log: true
+
+- name: "seat {{ _seat }} | the Pipelines-as-Code hook, if present"
+  ansible.builtin.set_fact:
+    _seat_pac_hooks: "{{ (r_seat_hooks.json | default([])) | selectattr('config.url', 'defined') | selectattr('config.url', 'equalto', _pac_controller_url) | list if (r_seat_hooks.status | default(0)) == 200 else [] }}"
+    _seat_hook_body:
+      type: gitea
+      active: true
+      branch_filter: "*"
+      events: [push, pull_request, pull_request_sync, issue_comment, pull_request_comment]
+      config: { url: "{{ _pac_controller_url | default('') }}", content_type: json, secret: "{{ _seat_pac_secret }}" }
+  no_log: true
+
+- name: "seat {{ _seat }} | org webhook -> Pipelines-as-Code"
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/orgs/{{ _seat }}{{ gitea_user_org_suffix }}/hooks"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body: "{{ _seat_hook_body }}"
+    validate_certs: false
+    status_code: [201]
+  when: (r_seat_hooks.status | default(0)) == 200 and _seat_pac_hooks | length == 0
+  no_log: true
+
+- name: "seat {{ _seat }} | org webhook secret in sync with the Secret"
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/orgs/{{ _seat }}{{ gitea_user_org_suffix }}/hooks/{{ _seat_pac_hooks[0].id }}"
+    method: PATCH
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body: "{{ _seat_hook_body | dict2items | rejectattr('key', 'equalto', 'type') | items2dict }}"
+    validate_certs: false
+    status_code: [200]
+  when: (r_seat_hooks.status | default(0)) == 200 and _seat_pac_hooks | length > 0
+  no_log: true

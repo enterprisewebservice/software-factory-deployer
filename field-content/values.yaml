@@ -50,6 +50,9 @@ ansible:
     - PyYAML
     - requests
     - jmespath
+    # the quay stage generates Tekton Chains' cosign key pair in this pod
+    - cryptography
+    - pynacl
 
   # pinned for the ansible-core 2.15 line the runner image resolves
   collections:
@@ -61,7 +64,7 @@ ansible:
     ACTION: provision
     # First RHDP order: operators, the per-seat Showroom guides, and the userinfo ConfigMap.
     # Add gitea,gitops,rhoai_maas,rhdh,keycloak_users,agent_platform,verify as those stages land.
-    software_factory_stages: "operators,gitea,keycloak_users,rhdh,agent_platform,rhoai_maas,mattermost,seats,mcp_gateway,model_desk,showroom,verify,userinfo"
+    software_factory_stages: "operators,gitea,keycloak_users,rhdh,agent_platform,rhoai_maas,mattermost,quay,seats,mcp_gateway,model_desk,showroom,verify,userinfo"
     # Empty = the agent-office operator is skipped. Set to a catalog image the ordered cluster
     # can pull (the reference cluster's images are in its own Quay today).
     agent_office_catalog_image: quay.io/dpeterso/agent-office-operator-catalog:v1.7.81

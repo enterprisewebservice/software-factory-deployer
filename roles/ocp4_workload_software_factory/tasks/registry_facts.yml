@@ -1,0 +1,21 @@
+---
+# Where the cluster's registry is, for stages that run after (or without) the quay stage:
+# _quay_host is empty when no registry instance exists, and the guide attributes fall back to
+# the reference cluster's values so the pages still render.
+- name: registry | QuayRegistry status
+  kubernetes.core.k8s_info:
+    api_version: quay.redhat.com/v1
+    kind: QuayRegistry
+    name: "{{ quay_registry_name }}"
+    namespace: "{{ quay_namespace }}"
+  register: r_registry_facts
+  failed_when: false
+
+- name: registry | facts
+  ansible.builtin.set_fact:
+    _quay_host: "{{ ((r_registry_facts.resources | default([{}]))[0].status | default({})).registryEndpoint | default('') | regex_replace('^https?://', '') }}"
+
+- name: registry | guide attributes
+  ansible.builtin.set_fact:
+    _artifact_registry: "{{ _quay_host if _quay_host | length > 0 else reference_artifact_registry }}"
+    _registry_org: "{{ quay_org if _quay_host | length > 0 else reference_registry_org }}"

@@ -29,33 +29,8 @@
 - name: gitea | install (operator + instance + admin + users)
   ansible.builtin.include_tasks: gitea_install.yml
 
-- name: gitea | fail fast when the install prerequisite is missing
-  kubernetes.core.k8s_info:
-    api_version: route.openshift.io/v1
-    kind: Route
-    name: gitea
-    namespace: "{{ gitea_namespace }}"
-  register: r_gitea_route
-  failed_when: r_gitea_route.resources | length == 0
-
-- name: gitea | derive gitea_host from the Route when unset
-  ansible.builtin.set_fact:
-    gitea_host: "{{ r_gitea_route.resources[0].spec.host }}"
-  when: gitea_host | length == 0
-
-- name: gitea | read admin credentials (created by the install)
-  kubernetes.core.k8s_info:
-    kind: Secret
-    name: gitea-admin-credentials
-    namespace: "{{ gitea_namespace }}"
-  register: r_gitea_admin
-  failed_when: r_gitea_admin.resources | length == 0
-
-- name: gitea | set admin auth facts
-  ansible.builtin.set_fact:
-    _gitea_api: "https://{{ gitea_host }}/api/v1"
-    _gitea_admin_password: "{{ r_gitea_admin.resources[0].data.password | b64decode }}"
-  no_log: true
+- name: gitea | host, API and admin facts
+  ansible.builtin.include_tasks: gitea_facts.yml
 
 - name: gitea | ensure per-attendee users exist
   ansible.builtin.uri:
@@ -377,3 +352,4 @@
   loop:
     - agent-office-appproject-gitea.yaml.j2
     - agent-office-appset-gitea.yaml.j2
+    - agent-office-seat-services-appset-gitea.yaml.j2

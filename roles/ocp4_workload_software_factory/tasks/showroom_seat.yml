@@ -18,6 +18,9 @@
       devhub_url: "{{ _devhub_url | default('not-deployed-yet') }}"
       mattermost_url: "{{ _mattermost_url | default('not-deployed-yet') }}"
       ocp_version: "{{ _ocp_minor }}"
+      # The cluster's own registry (quay stage): Module 4 reads skill artifacts there, Module 6 pushes images there.
+      artifact_registry: "{{ _artifact_registry }}"
+      registry_org: "{{ _registry_org }}"
 
 - name: "showroom | record the guide URL for {{ keycloak_user_prefix }}{{ _seat_n }}"
   ansible.builtin.set_fact:

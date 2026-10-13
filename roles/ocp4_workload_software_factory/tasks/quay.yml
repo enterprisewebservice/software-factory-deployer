@@ -1,0 +1,375 @@
+---
+# quay stage: the cluster's own registry (Red Hat Quay) and the signing key for Tekton Chains.
+#
+# What the guide relies on and this stage provides:
+#   - Module 4, exercise 2 reads skill artifacts "in the cluster's own container registry" with
+#     the seat's pull secret: the workshop's artifacts are mirrored here from their public home,
+#     digests preserved, into the organization {{ quay_org }} (private repositories).
+#   - Module 6 pushes <seat>-order-metrics:main here from a Pipelines-as-Code run in the seat
+#     namespace, Tekton Chains signs it, and the seat's pods pull it: per-seat push robots that
+#     can create repositories, one shared read robot that every new repository admits, the
+#     Secrets the seats stage copies into each namespace, and a cosign key pair for Chains.
+# Everything is created once and kept: the superuser's API token, robot tokens and the signing
+# key survive re-runs (Quay returns an existing robot's token; the key is generated only when
+# signing-secrets is empty).
+
+- name: quay | instance (the operators stage created it; re-applied for stand-alone runs)
+  ansible.builtin.include_tasks: quay_instance.yml
+
+- name: quay | wait for the registry endpoint (postgres, redis, bucket and app initialise; usually 5-10 minutes)
+  kubernetes.core.k8s_info:
+    api_version: quay.redhat.com/v1
+    kind: QuayRegistry
+    name: "{{ quay_registry_name }}"
+    namespace: "{{ quay_namespace }}"
+  register: r_quay
+  retries: "{{ ((quay_registry_endpoint_timeout | int) / 20) | round(0, 'ceil') | int }}"
+  delay: 20
+  until: >-
+    r_quay.resources | length > 0
+    and (r_quay.resources[0].status.registryEndpoint | default('')) | length > 0
+    and (r_quay.resources[0].status.conditions | default([]) | selectattr('type', 'equalto', 'Available')
+         | selectattr('status', 'equalto', 'True') | list | length) > 0
+
+- name: quay | registry facts
+  ansible.builtin.set_fact:
+    _quay_host: "{{ r_quay.resources[0].status.registryEndpoint | regex_replace('^https?://', '') | regex_replace('/$', '') }}"
+    _quay_api: "{{ r_quay.resources[0].status.registryEndpoint | regex_replace('/$', '') }}/api/v1"
+    _artifact_registry: "{{ r_quay.resources[0].status.registryEndpoint | regex_replace('^https?://', '') | regex_replace('/$', '') }}"
+    _registry_org: "{{ quay_org }}"
+    _quay_seats: "{{ range(1, num_users | int + 1) | map('regex_replace', '^', keycloak_user_prefix) | list }}"
+
+- name: quay | the API answers through the route
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/discovery"
+    validate_certs: false
+    status_code: [200]
+  register: r_quay_disc
+  retries: 30
+  delay: 10
+  until: (r_quay_disc.status | default(0)) == 200
+
+# ---- superuser ------------------------------------------------------------------------------
+- name: quay | stored superuser credentials, if any
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: quay-admin
+    namespace: "{{ quay_namespace }}"
+  register: r_quay_admin
+  no_log: true
+
+- name: quay | superuser, first run (FEATURE_USER_INITIALIZE lets the first API call create it)
+  when: r_quay_admin.resources | length == 0
+  block:
+    - name: quay | superuser password
+      ansible.builtin.set_fact:
+        _quay_admin_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
+      no_log: true
+
+    - name: quay | initialize the superuser and its API token
+      ansible.builtin.uri:
+        url: "{{ _quay_api }}/user/initialize"
+        method: POST
+        body_format: json
+        body:
+          username: "{{ quay_superuser }}"
+          password: "{{ _quay_admin_password }}"
+          email: "{{ quay_superuser }}@{{ cluster_domain }}"
+          access_token: true
+        validate_certs: false
+        status_code: [200, 400]
+      register: r_quay_init
+      no_log: true
+
+    - name: quay | the database was initialised by an earlier run but its credentials are gone
+      ansible.builtin.fail:
+        msg: >-
+          Quay refused /user/initialize ({{ r_quay_init.json.message | default(r_quay_init.json.error_message | default('400')) }})
+          and Secret {{ quay_namespace }}/quay-admin is missing. Restore that Secret (username, password, token)
+          or delete the QuayRegistry and its postgres PVC and run again.
+      when: r_quay_init.status != 200
+
+    - name: quay | superuser Secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: quay-admin
+            namespace: "{{ quay_namespace }}"
+            labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+          type: Opaque
+          stringData:
+            username: "{{ quay_superuser }}"
+            password: "{{ _quay_admin_password }}"
+            token: "{{ r_quay_init.json.access_token }}"
+      no_log: true
+
+    - name: quay | superuser token
+      ansible.builtin.set_fact:
+        _quay_token: "{{ r_quay_init.json.access_token }}"
+      no_log: true
+
+- name: quay | superuser token from the Secret
+  ansible.builtin.set_fact:
+    _quay_token: "{{ r_quay_admin.resources[0].data.token | b64decode }}"
+  when: r_quay_admin.resources | length > 0
+  no_log: true
+
+- name: quay | the token works
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/user/"
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    validate_certs: false
+    status_code: [200]
+  no_log: true
+
+# ---- organization, teams, robots --------------------------------------------------------------
+- name: quay | organization {{ quay_org }}
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/"
+    method: POST
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    body_format: json
+    body: { name: "{{ quay_org }}", email: "{{ quay_org }}@{{ cluster_domain }}" }
+    validate_certs: false
+    status_code: [201, 400]
+  register: r_quay_org
+  failed_when: r_quay_org.status == 400 and not ((r_quay_org.json.error_message | default(r_quay_org.json.detail | default(''))) is search('already exists'))
+  no_log: true
+
+# platform (admin): the mirror robot, which creates the artifact repositories.
+# builders (creator): the seats' robots; a creator may push a new repository into being and
+# owns the ones it created, and nothing else — one seat cannot overwrite another's image.
+- name: quay | teams
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/team/{{ item.name }}"
+    method: PUT
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    body_format: json
+    body: { role: "{{ item.role }}", description: "{{ item.description }}" }
+    validate_certs: false
+    status_code: [200]
+  loop:
+    - { name: platform, role: admin, description: "software-factory-deployer: the artifact mirror" }
+    - { name: builders, role: creator, description: "software-factory-deployer: one robot per seat; pipelines push with it" }
+  loop_control: { label: "{{ item.name }} ({{ item.role }})" }
+  no_log: true
+
+- name: quay | robot accounts, existing
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/robots/{{ item }}"
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    validate_certs: false
+    status_code: [200, 404]
+  loop: "{{ ['mirror', 'pull'] + _quay_seats }}"
+  register: r_quay_robots_get
+  no_log: true
+
+- name: quay | robot accounts, missing
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/robots/{{ item.item }}"
+    method: PUT
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    body_format: json
+    body: { description: "software-factory-deployer" }
+    validate_certs: false
+    status_code: [201]
+  loop: "{{ r_quay_robots_get.results | selectattr('status', 'equalto', 404) | list }}"
+  loop_control: { label: "{{ item.item }}" }
+  register: r_quay_robots_put
+  no_log: true
+
+- name: quay | robot tokens
+  ansible.builtin.set_fact:
+    _quay_robot_tokens: >-
+      {%- set m = {} -%}
+      {%- for r in r_quay_robots_get.results if r.status == 200 -%}
+        {%- set _ = m.update({r.item: r.json.token}) -%}
+      {%- endfor -%}
+      {%- for r in (r_quay_robots_put.results | default([])) if r.json is defined -%}
+        {%- set _ = m.update({r.item.item: r.json.token}) -%}
+      {%- endfor -%}
+      {{ m }}
+  no_log: true
+
+- name: quay | team membership
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/team/{{ item.team }}/members/{{ quay_org }}+{{ item.robot }}"
+    method: PUT
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ [{'team': 'platform', 'robot': 'mirror'}] + (_quay_seats | map('community.general.dict_kv', 'robot') | map('combine', {'team': 'builders'}) | list) }}"
+  loop_control: { label: "{{ item.team }} <- {{ quay_org }}+{{ item.robot }}" }
+  no_log: true
+
+# Default permission: every repository created in the organization, by whichever robot, admits
+# the shared read robot. The seats' pull secret is that robot; the operator pulls skill
+# artifacts and the seats' pods pull their images with it.
+- name: quay | default permissions
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/prototypes"
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    validate_certs: false
+    status_code: [200]
+  register: r_quay_protos
+  no_log: true
+
+- name: quay | every new repository admits the read robot
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/prototypes"
+    method: POST
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    body_format: json
+    body: { role: read, delegate: { name: "{{ quay_org }}+pull", kind: user } }
+    validate_certs: false
+    status_code: [200]
+  when: >-
+    (r_quay_protos.json.prototypes | default([]) | selectattr('role', 'equalto', 'read')
+     | selectattr('delegate.name', 'equalto', quay_org ~ '+pull') | rejectattr('activating_user') | list | length) == 0
+  no_log: true
+
+# ---- the Secrets the seats stage copies ---------------------------------------------------------
+- name: quay | which robot goes where
+  ansible.builtin.set_fact:
+    _quay_secret_docs: >-
+      {%- set docs = [{'name': 'quay-pull-robot', 'robot': 'pull'}, {'name': 'artifact-mirror-auth', 'robot': 'mirror'}] -%}
+      {%- for s in _quay_seats -%}{%- set _ = docs.append({'name': s ~ '-quay-robot', 'robot': s}) -%}{%- endfor -%}
+      {{ docs }}
+
+- name: quay | robot credentials as pull-secret documents (seats copy theirs; the mirror Job mounts its own)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ item.name }}"
+        namespace: "{{ quay_namespace }}"
+        labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+      type: kubernetes.io/dockerconfigjson
+      stringData:
+        .dockerconfigjson: >-
+          {{ {'auths': {_quay_host: {'username': quay_org ~ '+' ~ item.robot, 'password': _quay_robot_tokens[item.robot],
+                                     'auth': (quay_org ~ '+' ~ item.robot ~ ':' ~ _quay_robot_tokens[item.robot]) | b64encode}}} | to_json }}
+  loop: "{{ _quay_secret_docs }}"
+  loop_control: { label: "{{ item.name }}" }
+  no_log: true
+
+# ---- mirror the workshop's skill artifacts ------------------------------------------------------
+- name: quay | artifact mirror Job (skopeo sync, digests preserved) — replace any earlier run
+  kubernetes.core.k8s:
+    state: absent
+    api_version: batch/v1
+    kind: Job
+    name: artifact-mirror
+    namespace: "{{ quay_namespace }}"
+    wait: true
+    wait_timeout: 120
+
+- name: quay | artifact mirror Job
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'artifact-mirror-job.yaml.j2') | from_yaml }}"
+
+- name: quay | wait for the mirror
+  kubernetes.core.k8s_info:
+    api_version: batch/v1
+    kind: Job
+    name: artifact-mirror
+    namespace: "{{ quay_namespace }}"
+  register: r_quay_mirror
+  retries: 90
+  delay: 10
+  until: >-
+    (r_quay_mirror.resources[0].status.succeeded | default(0)) >= 1
+    or (r_quay_mirror.resources[0].status.failed | default(0)) >= 3
+  failed_when: false
+
+- name: quay | mirror log
+  kubernetes.core.k8s_log:
+    namespace: "{{ quay_namespace }}"
+    label_selectors: ["job-name=artifact-mirror"]
+  register: r_quay_mirror_log
+  failed_when: false
+
+- name: quay | the mirror succeeded
+  ansible.builtin.assert:
+    that: (r_quay_mirror.resources[0].status.succeeded | default(0)) >= 1
+    fail_msg: "artifact mirror failed: {{ (r_quay_mirror_log.log | default('')) | regex_findall('.*(?:error|Error|FATA|denied|unauthorized|not found).*') | last | default('see Job registry/artifact-mirror') }}"
+    success_msg: "{{ artifact_mirror_repos | length }} artifact repositories mirrored from {{ artifact_mirror_source }} into {{ _quay_host }}/{{ quay_org }}"
+
+- name: quay | the read robot on the mirrored repositories (explicit, besides the default permission)
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/repository/{{ quay_org }}/{{ item }}/permissions/user/{{ quay_org }}+pull"
+    method: PUT
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    body_format: json
+    body: { role: read }
+    validate_certs: false
+    status_code: [200]
+  loop: "{{ artifact_mirror_repos }}"
+  no_log: true
+
+# ---- Tekton Chains: a cosign key pair the moment the cluster has a registry to sign into --------
+- name: quay | Tekton Chains signing key
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: signing-secrets
+    namespace: "{{ pipelines_namespace }}"
+  register: r_chains_secret
+  no_log: true
+
+- name: quay | key Tekton Chains (first run; the operator ships signing-secrets empty)
+  when: "'cosign.key' not in ((r_chains_secret.resources | default([{}]))[0].data | default({}))"
+  block:
+    - name: quay | key password
+      ansible.builtin.set_fact:
+        _cosign_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=32, chars=['ascii_letters', 'digits']) }}"
+      no_log: true
+
+    - name: quay | generate the key pair (cosign's own encrypted format, no cosign binary needed)
+      ansible.builtin.command: "{{ cosign_python }} {{ role_path }}/files/cosign_keypair.py"
+      environment: { COSIGN_PASSWORD: "{{ _cosign_password }}" }
+      register: r_cosign
+      changed_when: true
+      no_log: true
+
+    - name: quay | signing-secrets
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: signing-secrets
+            namespace: "{{ pipelines_namespace }}"
+          type: Opaque
+          stringData:
+            cosign.key: "{{ (r_cosign.stdout | from_json)['cosign.key'] }}"
+            cosign.password: "{{ _cosign_password }}"
+            cosign.pub: "{{ (r_cosign.stdout | from_json)['cosign.pub'] }}"
+      no_log: true
+
+    - name: quay | the Chains controller loads the key on restart
+      kubernetes.core.k8s:
+        state: patched
+        api_version: apps/v1
+        kind: Deployment
+        name: tekton-chains-controller
+        namespace: "{{ pipelines_namespace }}"
+        definition:
+          spec:
+            template:
+              metadata:
+                annotations:
+                  software-factory.redhat.com/restarted-at: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+
+- name: quay | done
+  ansible.builtin.debug:
+    msg: >-
+      registry https://{{ _quay_host }} (organization {{ quay_org }}): {{ artifact_mirror_repos | join(', ') }} mirrored;
+      robots mirror, pull, {{ _quay_seats | join(', ') }}; Tekton Chains
+      {{ 'keyed now' if ('cosign.key' not in ((r_chains_secret.resources | default([{}]))[0].data | default({}))) else 'already keyed' }}

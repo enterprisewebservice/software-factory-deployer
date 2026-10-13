@@ -55,10 +55,14 @@ framework are yours to choose; these interfaces are not.
 
 ## deploy/deployment.yaml contract
 
-- Image: `quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/<seat>-<service>:main`
-  where `<seat>` is your Gitea org name minus its `-agents` suffix
-  (find the org with your gitea tools) and `<service>` is the
-  repository name. `imagePullPolicy: Always`.
+- Image: exactly the image reference the request states. The platform
+  publishes every service at `<registry>/<org>/<seat>-<service>:main`,
+  and the request names the registry and org of the cluster you are on;
+  `<seat>` is your Gitea org name minus its `-agents` suffix (find the
+  org with your gitea tools) and `<service>` is the repository name.
+  When the request names no registry, use the reference platform's:
+  `quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/<seat>-<service>:main`.
+  Never invent a registry host. `imagePullPolicy: Always`.
 - `imagePullSecrets` naming `quay-pull-secret`.
 - `containerPort: 8080`; Service `port: 8080` with a named
   `targetPort`.

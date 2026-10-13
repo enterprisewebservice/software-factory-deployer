@@ -1,0 +1,53 @@
+# ApplicationSet — the gitea flavour of the reference cluster's seat-services appset
+# (Module 6's promotion lane). Any repository in an attendee's org that carries
+# deploy/deployment.yaml and is NOT an agent gitops repo (those carry the
+# argocd/applicationset-managed marker and belong to agent-office-agents-gitea) becomes an
+# Application named <org>-<repo>, syncing its deploy/ directory into the seat's workspace.
+# Shape copied from salamander's seat-services-gitea (live 2026-10-13).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agent-office-seat-services-gitea
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+{% for n in range(1, num_users | int + 1) %}
+    - scmProvider:
+        gitea:
+          owner: {{ keycloak_user_prefix }}{{ n }}{{ gitea_user_org_suffix }}
+          api: https://{{ gitea_host }}
+          tokenRef:
+            secretName: {{ gitea_scm_secret_name }}
+            key: token
+        cloneProtocol: https
+        requeueAfterSeconds: 60
+        filters:
+          - pathsExist: ['deploy/deployment.yaml']
+            pathsDoNotExist: ['argocd/applicationset-managed']
+{% endfor %}
+  template:
+    metadata:
+      name: '{{ '{{ .organization }}' }}-{{ '{{ .repository }}' }}'
+      labels:
+        app.kubernetes.io/managed-by: seat-services-applicationset
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: agent-office
+      source:
+        repoURL: '{{ '{{ .url }}' }}'
+        targetRevision: '{{ '{{ .branch }}' }}'
+        path: deploy
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ '{{ trimSuffix "' }}{{ gitea_user_org_suffix }}{{ '" .organization }}' }}-agent-workspace'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

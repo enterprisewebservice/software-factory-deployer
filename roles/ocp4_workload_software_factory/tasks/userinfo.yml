@@ -1,6 +1,10 @@
 ---
 # RHDP integration: a ConfigMap labelled demo.redhat.com/userinfo is read back by the
 # platform and shown to the person who ordered. Values must be strings.
+- name: userinfo | registry facts (stand-alone run)
+  ansible.builtin.include_tasks: registry_facts.yml
+  when: _quay_host is not defined
+
 - name: userinfo | base data
   ansible.builtin.set_fact:
     _userinfo:
@@ -14,6 +18,7 @@
       num_users: "{{ num_users | string }}"
       stages_run: "{{ _stages | join(',') }}"
       gitea_url: "{{ 'https://' ~ gitea_host if (gitea_host | default('') | length > 0) else 'not-deployed' }}"
+      registry_url: "{{ 'https://' ~ _quay_host if (_quay_host | default('') | length > 0) else 'not-deployed' }}"
       devhub_url: "{{ _devhub_url | default('not-deployed') }}"
       mattermost_url: "{{ _mattermost_url | default('not-deployed') }}"
 

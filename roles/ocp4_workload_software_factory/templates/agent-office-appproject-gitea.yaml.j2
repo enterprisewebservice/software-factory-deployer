@@ -18,6 +18,8 @@ spec:
     - 'https://github.com/enterprisewebservice/*-autoresearch-gitops.git'
     # Gitea side — attendee repos in per-user orgs: <user><suffix>/<name>-agent-gitops.
     - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*-agent-gitops.git'
+    # ... and the services their dev agents ship (Module 6: the seat-services appset adopts them).
+    - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*'
     - 'https://{{ gitea_host }}/*{{ gitea_user_org_suffix }}/*-autoresearch-gitops.git'
   destinations:
     - namespace: {{ ocp4_workload_software_factory_namespace }}

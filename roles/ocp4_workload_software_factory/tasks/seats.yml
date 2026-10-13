@@ -1,6 +1,42 @@
 ---
 # Seats: one isolated workspace per attendee (user1..N), the RHDP flavour of what the factory
 # hub's provisioner does per self-service seat on the reference cluster.
+# Module 6's lane per seat needs three facts from other stages: where Pipelines-as-Code
+# listens (org webhooks target it), the Gitea admin credential (to create those webhooks) and
+# the registry (the robots' Secrets live in its namespace). Each is derived here when missing so
+# the stage is correct alone and after the others.
+- name: seats | Pipelines-as-Code controller
+  kubernetes.core.k8s_info:
+    kind: ConfigMap
+    name: pipelines-as-code-info
+    namespace: "{{ pipelines_namespace }}"
+  register: r_pac_info
+  failed_when: false
+
+- name: seats | supply-chain facts
+  ansible.builtin.set_fact:
+    _pac_controller_url: "{{ (((r_pac_info.resources | default([{}]))[0].data | default({}))['controller-url']) | default('') }}"
+
+- name: seats | Gitea facts (stand-alone run)
+  ansible.builtin.include_tasks: gitea_facts.yml
+  when: _gitea_api is not defined
+
+- name: seats | registry facts (stand-alone run)
+  ansible.builtin.include_tasks: registry_facts.yml
+  when: _quay_host is not defined
+
+- name: seats | Tekton Chains public key (each seat gets a copy for the guide's verify step)
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: signing-secrets
+    namespace: "{{ pipelines_namespace }}"
+  register: r_seats_chains
+  no_log: true
+
+- name: seats | public key
+  ansible.builtin.set_fact:
+    _chains_pub: "{{ (((r_seats_chains.resources | default([{}]))[0].data | default({}))['cosign.pub'] | default('')) | b64decode }}"
+
 - name: seats | per-seat workspaces
   ansible.builtin.include_tasks: seat.yml
   vars:
@@ -13,4 +49,4 @@
 
 - name: seats | done
   ansible.builtin.debug:
-    msg: "{{ num_users }} seats: <user>-agent-workspace namespaces with RBAC, quota, limits, isolation and Gitea tokens"
+    msg: "{{ num_users }} seats: <user>-agent-workspace namespaces with RBAC, quota, limits, isolation, Gitea tokens{{ ', registry credentials, webhook secret and org webhook' if _quay_host | length > 0 else '' }}"

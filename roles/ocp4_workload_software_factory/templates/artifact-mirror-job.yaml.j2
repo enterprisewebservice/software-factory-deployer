@@ -1,0 +1,55 @@
+# One skopeo run per order: every tag of each workshop artifact repository, copied from its
+# public home into the cluster's registry with manifests byte-for-byte (digests preserved), so
+# the guide's content hashes and version lists hold here as on the reference cluster.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: artifact-mirror
+  namespace: {{ quay_namespace }}
+  labels:
+    app.kubernetes.io/managed-by: software-factory-deployer
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: artifact-mirror
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: skopeo
+          image: {{ skopeo_image }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              SRC_AUTH=""
+              [ -f /srcauth/auth.json ] && SRC_AUTH="--src-authfile /srcauth/auth.json"
+              for repo in {{ artifact_mirror_repos | join(' ') }}; do
+                echo "== ${repo}"
+                skopeo sync --all --preserve-digests --src docker --dest docker ${SRC_AUTH} \
+                  --dest-authfile /auth/auth.json --dest-tls-verify=false \
+                  "{{ artifact_mirror_source }}/${repo}" "{{ _quay_host }}/{{ quay_org }}"
+              done
+              echo "mirror complete"
+          volumeMounts:
+            - { name: auth, mountPath: /auth, readOnly: true }
+            - { name: srcauth, mountPath: /srcauth, readOnly: true }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+      volumes:
+        - name: auth
+          secret:
+            secretName: artifact-mirror-auth
+            items:
+              - { key: .dockerconfigjson, path: auth.json }
+        # Optional: a pull credential for a private source (Secret artifact-mirror-source-auth,
+        # type dockerconfigjson). The public default needs none.
+        - name: srcauth
+          secret:
+            secretName: artifact-mirror-source-auth
+            optional: true
+            items:
+              - { key: .dockerconfigjson, path: auth.json }
