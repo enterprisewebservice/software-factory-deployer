@@ -25,30 +25,26 @@ One Argo CD behaviour to know: when the hook Job fails, the retried Job is built
 
 | Stage | State on an RHDP order | Notes |
 |---|---|---|
-| operators | works | skips what the base installed; agent-office operator subscribes once `agent_office_catalog_image` names its published catalog |
+| operators | works | skips what the base installed; subscribes the agent-office operator from `quay.io/dpeterso/agent-office-operator-catalog:v1.7.80`, with the order's model endpoint wired in as the hiring form's recommender |
 | gitea | works | RHPDS gitea-operator, admin + user1..N, per-user orgs, tokens, Secrets, Argo AppProject + ApplicationSet |
 | keycloak_users | works | base realm `sso`: attendees group, `rhdh` and `gitea` OIDC clients, provider roles |
-| rhdh | works | chart 1.9.2 at `devhub.<domain>`, OIDC sign-in, Gitea + Argo CD, RBAC, template mirror, the workshop's own plugins |
-| agent_platform | works (platform half) | platform namespace, SCC + ClusterRole, attendee group; operator and console plugin wait for the catalog |
-| rhoai_maas | deferred | LiteMaaS key captured; ModelConnection created once the operator's CRD is served |
+| rhdh | works | chart 1.9.2 at `devhub.<domain>`, OIDC sign-in, Gitea + Argo CD, RBAC, the workshop's own plugins; the hire template is mirrored with this cluster's Gitea and the published OpenClaw image |
+| agent_platform | works | platform namespace, SCC + ClusterRole, attendee group, the operator's CSV, the catalog Service name Developer Hub proxies to, the console plugin |
+| rhoai_maas | works | ModelConnection `rhdp-litemaas` (marked default brain) from the LiteMaaS key RHDP issued, offered to the attendees group |
 | mattermost | works | Mattermost + PostgreSQL at `mattermost-mattermost.<domain>`, Gitea sign-in, admin token, agents team, bridge |
-| seats | works | `userN-agent-workspace`: RBAC, quota, limits, isolation, Gitea token; SCC binding once the platform exists |
+| seats | works | `userN-agent-workspace`: RBAC, quota, limits, isolation, Gitea token, SCC and bridge bindings, the operator's tenant annotations (`agentoffice.ai/user`, `agentoffice.ai/groups`) |
 | mcp_gateway | works | Kuadrant instance, MCP gateway on the OpenShift AI gateway class, policies, Gitea MCP server (54 tools) |
 | showroom, userinfo | work | one guide per seat; URLs and the workshop password on the order page |
 | verify | works | Gitea, Developer Hub, Mattermost and the first guide answer; the MCP registration is Ready |
 | Quay + Pipelines-as-Code (Module 6), MaaS lane (Module 7), guide content for the RHDP flavour | not yet | |
 
-Images: everything the workshop needs is mirrored to `quay.io/dpeterso` (map in `docs/mirror-to-quay-io.txt`); the repositories are private until flipped public in the Quay UI.
+Images: everything the workshop needs is public under `quay.io/dpeterso` (mirror map in `docs/mirror-to-quay-io.txt`; the operator, bundle and catalog are pushed there by the operator repository's own pipelines on the reference cluster, robot account `dpeterso+salamander`).
 
-## What the first order does
+## What an order does
 
-`values.yaml` sets `software_factory_stages: operators,showroom,userinfo`:
+`values.yaml` runs every stage, in this order: `operators`, `gitea`, `keycloak_users`, `rhdh`, `agent_platform`, `rhoai_maas`, `mattermost`, `seats`, `mcp_gateway`, `showroom`, `verify`, `userinfo`. Each is idempotent and skips what already exists, so a second sync of the same order converges instead of failing. The stages that exist only for the agent platform read `agent_office_catalog_image`; with it empty the order still produces Gitea, Developer Hub, Mattermost, the MCP gateway, the seats and the guides, and the operator-dependent pieces are skipped with a message in the Job log.
 
-1. **operators**: Subscriptions for OpenShift Pipelines, OpenShift AI (`redhat-ods-operator` namespace and OperatorGroup are created first), External Secrets and the MCP gateway operator. Packages that already have a CSV are skipped, so the base's OpenShift GitOps is left alone. The agent-office operator is skipped while `agent_office_catalog_image` is empty.
-2. **showroom**: one lab guide per seat, `showroom-user1` to `showroom-userN`, built from https://github.com/enterprisewebservice/showroom-openshift-software-factory with the console, API and GitOps URLs filled in and plain-word placeholders for components not deployed yet. `N` comes from RHDP's `multi_user.num_users` when the order is multi-user, else 5.
-3. **userinfo**: ConfigMap `software-factory-userinfo` (label `demo.redhat.com/userinfo`) with the guide URLs and cluster URLs, which RHDP shows on the order page.
-
-Stages still to land, in order: `gitea`, `gitops`, `rhoai_maas`, `rhdh`, `keycloak_users`, `agent_platform`, `verify`. Add each to `software_factory_stages` as it is implemented. Prerequisite for `agent_platform`: the operator catalog, operator, openclaw gateway and skills images published to a registry the ordered cluster can pull; today they exist only in the reference cluster's Quay.
+`N` seats come from RHDP's `multi_user.num_users` when the order is multi-user, else 5. The lab guides are built from https://github.com/enterprisewebservice/showroom-openshift-software-factory with the console, API, Gitea, Developer Hub and Mattermost URLs filled in. The ConfigMap `software-factory-userinfo` (label `demo.redhat.com/userinfo`) carries those URLs and the workshop password, which RHDP shows on the order page.
 
 ## Reading the result
 
