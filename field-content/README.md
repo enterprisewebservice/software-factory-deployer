@@ -9,6 +9,7 @@ This directory is the Helm chart that RHDP's **Field Sourced Content - OpenShift
 | Cloud provider | CNV (the item's own recommendation; AWS only for AWS integration) |
 | Cluster size | multi-node (OpenShift AI and the agent platform do not fit SNO) |
 | OpenShift version | the newest offered (4.21 or later: OpenShift AI 3.x and the MCP gateway operator need it) |
+| Models-as-a-Service model | a Claude model. The order's LiteMaaS key becomes the default brain; the small open models in the list do not call tools reliably, and Modules 3 to 7 need tool calls |
 | Git repository URL | `https://github.com/enterprisewebservice/software-factory-deployer` |
 | Revision | `main` (or the branch under test) |
 | Path | `field-content` |
