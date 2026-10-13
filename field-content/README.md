@@ -25,13 +25,17 @@ One Argo CD behaviour to know: when the hook Job fails, the retried Job is built
 
 | Stage | State on an RHDP order | Notes |
 |---|---|---|
-| operators | works | skips what the base installed; agent-office operator waits for its published catalog |
+| operators | works | skips what the base installed; agent-office operator subscribes once `agent_office_catalog_image` names its published catalog |
 | gitea | works | RHPDS gitea-operator, admin + user1..N, per-user orgs, tokens, Secrets, Argo AppProject + ApplicationSet |
 | keycloak_users | works | base realm `sso`: attendees group, `rhdh` and `gitea` OIDC clients, provider roles |
-| rhoai_maas | deferred | LiteMaaS key is captured; the ModelConnection needs the operator's CRD |
-| rhdh | works | chart 1.9.2, OIDC sign-in, Gitea + Argo CD integrations, RBAC, template mirror; custom plugins off until quay.io repos are public |
+| rhdh | works | chart 1.9.2 at `devhub.<domain>`, OIDC sign-in, Gitea + Argo CD, RBAC, template mirror, the workshop's own plugins |
+| agent_platform | works (platform half) | platform namespace, SCC + ClusterRole, attendee group; operator and console plugin wait for the catalog |
+| rhoai_maas | deferred | LiteMaaS key captured; ModelConnection created once the operator's CRD is served |
+| mattermost | first run in progress | Mattermost + PostgreSQL, Gitea sign-in, admin token, agents team, bridge |
+| seats | works | `userN-agent-workspace`: RBAC, quota, limits, isolation, Gitea token; SCC binding once the platform exists |
+| mcp_gateway | works | Kuadrant instance, MCP gateway on the OpenShift AI gateway class, policies, Gitea MCP server (54 tools) |
 | showroom, userinfo | work | one guide per seat; URLs and the workshop password on the order page |
-| agent_platform, seats, verify | not yet | operator catalog must be published first (`quay.io/dpeterso`, operator branch `quay-io-release`) |
+| verify, Quay + Pipelines-as-Code (Module 6), MaaS lane (Module 7) | not yet | |
 
 Images: everything the workshop needs is mirrored to `quay.io/dpeterso` (map in `docs/mirror-to-quay-io.txt`); the repositories are private until flipped public in the Quay UI.
 
