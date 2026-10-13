@@ -53,6 +53,17 @@
       loop_control: { label: "{{ item.kind }}" }
       no_log: true
 
+    # The hiring form pre-selects the default-brain connection. The LiteMaaS connection is
+    # the default only while the facilitator's Claude lane (model_desk stage, Secret
+    # model-desk-gcp-adc) is absent; once that lane is published it takes the annotation.
+    - name: models | is the Claude lane credential present?
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: model-desk-gcp-adc
+        namespace: "{{ model_desk_namespace }}"
+      register: r_mc_adc
+      no_log: true
+
     - name: models | ModelConnection for every workshop seat
       kubernetes.core.k8s:
         state: present
@@ -61,11 +72,7 @@
           kind: ModelConnection
           metadata:
             name: rhdp-litemaas
-            # The hiring form pre-selects the default-brain connection for a user who may
-            # see it; without it an attendee's form opens on the platform Codex preset,
-            # which this cluster does not have.
-            annotations:
-              agentoffice.ai/default-brain: "true"
+            annotations: "{{ {'agentoffice.ai/default-brain': 'true'} if (r_mc_adc.resources | length == 0) else {} }}"
           spec:
             displayName: "Workshop model ({{ maas_external_provider_model }})"
             description: "The model endpoint RHDP issued with this order (LiteMaaS). Shared key, 7-day validity."

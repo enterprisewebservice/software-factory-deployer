@@ -1,0 +1,154 @@
+---
+# Brain stage: the facilitator's Claude lane as a ModelConnection every seat may pick.
+#
+# The workshop's "Give the platform a brain" step creates ONE Secret by hand (the Vertex
+# application-default credential, model-desk-gcp-adc/adc.json). This stage does everything
+# else: the model-desk proxy in front of Claude on Vertex AI, its admin key, the agent-side
+# key Secret, and the ModelConnection `claude-work`, marked as the default brain. Without
+# the credential the stage reports what is missing and the order still completes on the
+# LiteMaaS connection the order carries.
+
+- name: brain | the facilitator's Claude credential (model-desk-gcp-adc)
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: model-desk-gcp-adc
+    namespace: "{{ model_desk_namespace }}"
+  register: r_adc
+  no_log: true
+
+- name: brain | credential not provided yet
+  ansible.builtin.debug:
+    msg: >-
+      No Secret {{ model_desk_namespace }}/model-desk-gcp-adc: the Claude lane is not
+      published. Create it as the guide's first step and sync again; until then the
+      LiteMaaS connection from the order is the only brain.
+  when: r_adc.resources | length == 0
+
+- name: brain | Claude lane
+  when: r_adc.resources | length > 0
+  block:
+    - name: brain | existing admin key
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: model-desk-secrets
+        namespace: "{{ model_desk_namespace }}"
+      register: r_md_secret
+      no_log: true
+
+    - name: brain | admin key (created once)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata: { name: model-desk-secrets, namespace: "{{ model_desk_namespace }}" }
+          type: Opaque
+          stringData:
+            LITELLM_MASTER_KEY: "sk-{{ lookup('password', '/dev/null chars=ascii_letters,digits length=40') }}"
+      when: r_md_secret.resources | length == 0
+      no_log: true
+
+    - name: brain | admin key
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: model-desk-secrets
+        namespace: "{{ model_desk_namespace }}"
+      register: r_md_secret
+      no_log: true
+
+    - name: brain | model-desk proxy, config, Service
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'model-desk.yaml.j2') | from_yaml_all | list }}"
+
+    - name: brain | wait for the proxy
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: model-desk
+        namespace: "{{ model_desk_namespace }}"
+      register: r_md_dep
+      until: r_md_dep.resources | length > 0 and (r_md_dep.resources[0].status.availableReplicas | default(0)) | int >= 1
+      retries: 40
+      delay: 10
+
+    - name: brain | the proxy answers with the Claude models
+      ansible.builtin.uri:
+        url: "http://model-desk.{{ model_desk_namespace }}.svc.cluster.local:4000/v1/models"
+        headers: { Authorization: "Bearer {{ r_md_secret.resources[0].data.LITELLM_MASTER_KEY | b64decode }}" }
+      register: r_md_models
+      retries: 12
+      delay: 10
+      until: r_md_models.status == 200
+      no_log: true
+
+    - name: brain | one Claude turn through the proxy (the credential is live)
+      ansible.builtin.uri:
+        url: "http://model-desk.{{ model_desk_namespace }}.svc.cluster.local:4000/v1/chat/completions"
+        method: POST
+        headers: { Authorization: "Bearer {{ r_md_secret.resources[0].data.LITELLM_MASTER_KEY | b64decode }}" }
+        body_format: json
+        body:
+          model: "{{ claude_models[0].id }}"
+          max_tokens: 8
+          messages: [{ role: user, content: "Reply with the single word OK." }]
+        timeout: 90
+      register: r_md_turn
+      retries: 3
+      delay: 10
+      until: r_md_turn.status == 200
+      no_log: true
+
+    - name: brain | key Secret the connection reads
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata: { name: model-desk-agent-key, namespace: "{{ ocp4_workload_software_factory_namespace }}" }
+          type: Opaque
+          data:
+            api-key: "{{ r_md_secret.resources[0].data.LITELLM_MASTER_KEY }}"
+      no_log: true
+
+    - name: brain | ModelConnection claude-work (the default brain)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: agentoffice.ai/v1alpha1
+          kind: ModelConnection
+          metadata:
+            name: claude-work
+            annotations:
+              agentoffice.ai/default-brain: "true"
+          spec:
+            displayName: "Claude (Red Hat work subscription)"
+            description: "Claude on Google Vertex AI through the cluster's model-desk proxy. The facilitator's credential; shared key."
+            kind: endpoint
+            provider: custom
+            api: openai-completions
+            baseUrl: "http://model-desk.{{ model_desk_namespace }}.svc.cluster.local:4000/v1"
+            apiKeySecretRef:
+              name: model-desk-agent-key
+              namespace: "{{ ocp4_workload_software_factory_namespace }}"
+              key: api-key
+            keyStrategy: shared
+            models: "{{ claude_models }}"
+            access:
+              groups: ["{{ workshop_attendees_group }}", "{{ workshop_openshift_group }}"]
+
+    - name: brain | the LiteMaaS connection steps down as default
+      kubernetes.core.k8s:
+        state: patched
+        api_version: agentoffice.ai/v1alpha1
+        kind: ModelConnection
+        name: rhdp-litemaas
+        definition:
+          metadata:
+            annotations:
+              agentoffice.ai/default-brain: null
+      failed_when: false
+
+    - name: brain | published
+      ansible.builtin.debug:
+        msg: "ModelConnection claude-work -> model-desk ({{ claude_models | map(attribute='id') | join(', ') }}); default brain"

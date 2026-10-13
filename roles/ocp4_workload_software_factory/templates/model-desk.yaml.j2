@@ -1,0 +1,85 @@
+# model-desk: the cluster's OpenAI-compatible front door to the facilitator's Claude lane
+# (Claude on Google Vertex AI, the Red Hat work subscription). Vendored from the reference
+# cluster's deploy/salamander-model-desk, reduced to the Claude models: the proxy (LiteLLM,
+# digest-pinned), its config, its admin key, and a Service. The Vertex credential is the
+# one thing the workshop's "Give the platform a brain" step provides by hand: Secret
+# model-desk-gcp-adc (key adc.json) in this namespace. Nothing here holds it in git.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ model_desk_namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-desk-config
+  namespace: {{ model_desk_namespace }}
+data:
+  config.yaml: |
+    model_list:
+{% for m in claude_models %}
+      - model_name: {{ m.id }}
+        litellm_params:
+          model: vertex_ai/{{ m.vertex_id | default(m.id) }}
+          vertex_project: {{ claude_vertex_project }}
+          vertex_location: {{ claude_vertex_location }}
+          vertex_credentials: /etc/gcp/adc.json
+{% endfor %}
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-desk
+  namespace: {{ model_desk_namespace }}
+  labels: { app: model-desk }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: model-desk }
+  template:
+    metadata:
+      labels: { app: model-desk }
+      annotations:
+        software-factory.redhat.com/config-checksum: "{{ claude_models | to_json | hash('sha256') }}"
+    spec:
+      containers:
+        - name: litellm
+          image: {{ model_desk_image }}
+          args: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+          envFrom:
+            - secretRef: { name: model-desk-secrets }
+          ports: [{ containerPort: 4000 }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/litellm, readOnly: true }
+            - { name: gcp-adc, mountPath: /etc/gcp, readOnly: true }
+          livenessProbe:
+            httpGet: { path: /health/liveliness, port: 4000 }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: { path: /health/readiness, port: 4000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+      volumes:
+        - name: config
+          configMap: { name: model-desk-config }
+        - name: gcp-adc
+          secret: { secretName: model-desk-gcp-adc }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-desk
+  namespace: {{ model_desk_namespace }}
+  labels: { app: model-desk }
+spec:
+  selector: { app: model-desk }
+  ports:
+    - { name: http, port: 4000, targetPort: 4000 }

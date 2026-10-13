@@ -14,6 +14,16 @@ sovereign_vllm_model: ""              # model id when sovereign_vllm is true (GP
 # agent-office operator (values from the reference cluster)
 agent_office_catalog_image: ""        # the chart pins it: quay.io/dpeterso/agent-office-operator-catalog:<tag>
 agent_office_channel: alpha
+
+# Brain stage (model_desk): the facilitator's Claude lane. The Vertex credential Secret
+# (model-desk-gcp-adc/adc.json) is the guide's first step; the rest is automated.
+model_desk_namespace: model-desk
+model_desk_image: ghcr.io/berriai/litellm@sha256:20b5044b619055374061a6d5b7b08754cad75aeabbf82ddf4f69cc0cf80ddaf4
+claude_vertex_project: itpc-gcp-global-revenue-claude
+claude_vertex_location: global
+claude_models:                              # newest permitted first; the hiring form picks the first
+  - { id: claude-sonnet-5, name: "Claude Sonnet 5" }
+  - { id: claude-opus-4-6, name: "Claude Opus 4.6" }
 mcp_gateway_channel: preview
 eso_channel: stable
 
@@ -67,7 +77,7 @@ keycloak_user_password: ""            # generated per-order (lookup('password', 
 
 # Stage selection. A list, or a comma-separated string when passed as an extra-var (the Field
 # Content Job does that). The first RHDP order runs: operators,showroom,userinfo
-software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, seats, mcp_gateway, showroom, verify, userinfo]
+software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, seats, mcp_gateway, model_desk, showroom, verify, userinfo]
 cluster_domain: ""                    # derived from ingresses.config.openshift.io/cluster when empty
 
 # Showroom: one lab guide per seat (user1..N), the RHDP multi-user model
