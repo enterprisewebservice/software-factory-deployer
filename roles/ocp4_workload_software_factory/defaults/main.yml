@@ -76,4 +76,4 @@ showroom_content_ref: main
 showroom_seat_mode: static            # the guide's {seat_mode} attribute
 
 # RHDP userinfo ConfigMap (demo.redhat.com/userinfo) lands in the Job's namespace on RHDP
-userinfo_namespace: "{{ runner_namespace | default(ocp4_workload_software_factory_namespace) }}"
+userinfo_namespace: "{{ runner_namespace | default(namespace | default(ocp4_workload_software_factory_namespace, true), true) }}"

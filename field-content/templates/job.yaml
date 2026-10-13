@@ -16,7 +16,9 @@ spec:
   {{- if gt (.Values.job.ttlSecondsAfterFinished | int) 0 }}
   ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
   {{- end }}
-  backoffLimit: 0
+  # Unattended runs: the playbook is idempotent, so a transient failure gets two retries.
+  backoffLimit: {{ .Values.job.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
   template:
     metadata:
       labels:
