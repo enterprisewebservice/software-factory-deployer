@@ -59,7 +59,7 @@ Modules 1, 2 and 5 pass as `user1`; Module 4's install path passes through the r
 | Modules 6 and 7 | not runnable | on-cluster Quay with Pipelines-as-Code, and a second brain, are not built for this flavour yet. |
 | Guide text | `workshop` identity provider, `admin-userN`, Vault and ESO refreshers | the ordered cluster signs in through `rhbk`, has no admin persona, and delivers seat tokens as plain Secrets (the guide's self-service text matches this flavour better than its fixed-seat text). |
 
-Fixes that came out of the run are in this repository: per-seat passwords adopted from the base, Gitea tokens minted once, the Authorino TLS override made conditional, and Gitea's OAuth2 provider enabled for the chat sign-in.
+Fixes that came out of the run are in this repository: per-seat passwords adopted from the base, Gitea tokens minted once, the Authorino TLS override made conditional, Gitea's OAuth2 provider enabled, Mattermost allowed to reach Gitea on a private ingress address, the chat sign-in card made uncacheable (a cached card looked like a sign-in loop), an Argo CD project role so attendees see their applications, and the chat bridge minting one access token per bot instead of one per minute.
 
 ## Reading the result
 
