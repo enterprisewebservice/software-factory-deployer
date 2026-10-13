@@ -195,6 +195,18 @@
       {{ m }}
   no_log: true
 
+- name: quay | team members as they are
+  ansible.builtin.uri:
+    url: "{{ _quay_api }}/organization/{{ quay_org }}/team/{{ item }}/members"
+    headers: { Authorization: "Bearer {{ _quay_token }}" }
+    validate_certs: false
+    status_code: [200]
+  loop: [platform, builders]
+  register: r_quay_members
+  no_log: true
+
+# Adding a member that is already in the team is not idempotent on Quay's side, so only the
+# missing ones are added.
 - name: quay | team membership
   ansible.builtin.uri:
     url: "{{ _quay_api }}/organization/{{ quay_org }}/team/{{ item.team }}/members/{{ quay_org }}+{{ item.robot }}"
@@ -204,6 +216,9 @@
     status_code: [200]
   loop: "{{ [{'team': 'platform', 'robot': 'mirror'}] + (_quay_seats | map('community.general.dict_kv', 'robot') | map('combine', {'team': 'builders'}) | list) }}"
   loop_control: { label: "{{ item.team }} <- {{ quay_org }}+{{ item.robot }}" }
+  when: >-
+    (quay_org ~ '+' ~ item.robot) not in
+    ((r_quay_members.results | selectattr('item', 'equalto', item.team) | first).json.members | map(attribute='name') | list)
   no_log: true
 
 # Default permission: every repository created in the organization, by whichever robot, admits
