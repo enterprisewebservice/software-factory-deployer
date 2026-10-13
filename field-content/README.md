@@ -15,6 +15,12 @@ This directory is the Helm chart that RHDP's **Field Sourced Content - OpenShift
 
 RHDP creates Argo Application `field-content` in `openshift-gitops` (project `default`, no prune, no self-heal) and stops watching. From there the deployment is yours to read in Argo and OpenShift.
 
+## Self-service rule
+
+Nobody is watching when an attendee's cluster is ordered. Every fix goes into this repository, never onto a cluster by hand; the Job is idempotent and retries itself (`backoffLimit: 2`, three-hour deadline); every stage must tolerate what the base already installed. The first order (13 October 2026, CNV multi-node, OpenShift 4.22.16, 2 users) proved the path end to end after three fixes that are now in the code: no cluster-wide CSV listing (788 copied CSVs took the Job out of memory), no second OperatorGroup next to the base's OpenShift AI install, and a CSV wait limited to subscriptions this run created.
+
+One Argo CD behaviour to know: when the hook Job fails, the retried Job is built from the manifests of the operation that started, not from a newer commit, while the Job itself clones the branch tip. Chart and role therefore tolerate each other across one revision (for example both names of the runner namespace variable). A clean new order never hits this.
+
 ## What the first order does
 
 `values.yaml` sets `software_factory_stages: operators,showroom,userinfo`:
