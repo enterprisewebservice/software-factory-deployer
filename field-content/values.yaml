@@ -14,10 +14,19 @@ job:
   restartPolicy: Never
   backoffLimit: 2                     # self-service: retry transient failures without a human
   activeDeadlineSeconds: 10800        # give up after 3 h rather than hang an order forever
-  # RHDP base clusters leave the control-plane nodes schedulable; one of them had a flaky
-  # DNS path (order 9cwxl, 13 Oct 2026) and three pods in a row landed there. Workers only.
+  # RHDP base clusters make the control-plane nodes schedulable, and a schedulable
+  # control-plane node also carries the worker role label, so a worker nodeSelector alone
+  # still lands there. One of them had a flaky DNS path (order 9cwxl, 13 Oct 2026) and four
+  # pods in a row ran on it. The affinity keeps the Job off control-plane nodes.
   nodeSelector:
     node-role.kubernetes.io/worker: ""
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - { key: node-role.kubernetes.io/control-plane, operator: DoesNotExist }
+              - { key: node-role.kubernetes.io/master, operator: DoesNotExist }
 
 # Namespace where the ansible-runner job runs (never openshift-operators)
 namespace:

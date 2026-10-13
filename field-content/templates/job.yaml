@@ -30,6 +30,10 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.job.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: ansible-runner
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
