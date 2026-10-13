@@ -1,0 +1,235 @@
+# Gitea MCP server behind the MCP gateway: vendored from the reference cluster's live objects.
+apiVersion: v1
+data:
+  nginx.conf: "# Self-contained \u2014 all writable paths point at /tmp (an emptyDir) so\n# the container can run with a random OpenShift UID.\npid /tmp/nginx.pid;\nworker_processes 1;\nerror_log /dev/stderr\
+    \ warn;\nevents { worker_connections 1024; }\nhttp {\n  client_body_temp_path /tmp/cbt;\n  proxy_temp_path        /tmp/pt;\n  fastcgi_temp_path      /tmp/fct;\n  uwsgi_temp_path        /tmp/ut;\n  scgi_temp_path\
+    \         /tmp/st;\n  access_log /dev/stdout;\n  server {\n    listen 8080;\n    location / {\n      proxy_pass http://127.0.0.1:8082;\n      proxy_http_version 1.1;\n      # (1) Accept normalization.\n\
+    \      proxy_set_header Accept \"application/json, text/event-stream\";\n      # (2) NO Authorization override \u2014 the client's own header (the\n      #     seat's pass-through bearer) flows upstream\
+    \ untouched.\n      proxy_set_header Connection \"\";\n      # Stream SSE responses straight through (no buffering).\n      proxy_buffering off;\n      proxy_read_timeout 3600s;\n      proxy_send_timeout\
+    \ 3600s;\n    }\n  }\n}\n"
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: accept-proxy
+    app.kubernetes.io/managed-by: agent-office-gitops
+    app.kubernetes.io/name: gitea-mcp-server
+  name: gitea-mcp-accept-proxy
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/managed-by: agent-office-gitops
+    app.kubernetes.io/name: gitea-mcp-server
+  name: gitea-mcp-server
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea-mcp-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: mcp-server
+        app.kubernetes.io/name: gitea-mcp-server
+    spec:
+      containers:
+      - command:
+        - nginx
+        - -g
+        - daemon off;
+        image: registry.access.redhat.com/ubi9/nginx-124:latest
+        imagePullPolicy: IfNotPresent
+        name: accept-proxy
+        ports:
+        - containerPort: 8080
+          name: sse
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: sse
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        startupProbe:
+          failureThreshold: 12
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: sse
+          timeoutSeconds: 1
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/nginx/nginx.conf
+          name: accept-proxy-config
+          readOnly: true
+          subPath: nginx.conf
+        - mountPath: /tmp
+          name: nginx-tmp
+      - args:
+        - -t
+        - http
+        - --port
+        - '8082'
+        - --host
+        - https://{{ gitea_host }}
+        command:
+        - /app/gitea-mcp
+        env:
+        - name: HOME
+          value: /tmp
+        image: docker.gitea.com/gitea-mcp-server:1.6.0
+        imagePullPolicy: IfNotPresent
+        name: mcp-server
+        ports:
+        - containerPort: 8082
+          name: mcp
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          tcpSocket:
+            port: mcp
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        startupProbe:
+          failureThreshold: 12
+          periodSeconds: 5
+          successThreshold: 1
+          tcpSocket:
+            port: mcp
+          timeoutSeconds: 1
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /tmp
+          name: mcp-tmp
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: gitea-mcp-accept-proxy
+        name: accept-proxy-config
+      - emptyDir: {}
+        name: nginx-tmp
+      - emptyDir: {}
+        name: mcp-tmp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: agent-office-gitops
+    app.kubernetes.io/name: gitea-mcp-server
+  name: gitea-mcp-server
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+spec:
+  ports:
+  - name: sse
+    port: 8080
+    protocol: TCP
+    targetPort: sse
+  selector:
+    app.kubernetes.io/name: gitea-mcp-server
+  type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  annotations: {}
+  labels:
+    app.kubernetes.io/component: backend-route
+    app.kubernetes.io/managed-by: agent-office-gitops
+    app.kubernetes.io/name: gitea-mcp-server
+  name: gitea-mcp-server-route
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+spec:
+  hostnames:
+  - gitea-mcp.mcp.local
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: mcp-gateway
+    namespace: {{ ocp4_workload_software_factory_namespace }}
+    sectionName: mcps
+  rules:
+  - backendRefs:
+    - group: ''
+      kind: Service
+      name: gitea-mcp-server
+      port: 8080
+      weight: 1
+    matches:
+    - path:
+        type: PathPrefix
+        value: /mcp
+---
+apiVersion: mcp.kuadrant.io/v1alpha1
+kind: MCPServerRegistration
+metadata:
+  annotations:
+    agentoffice.ai/client-recipe: '{"url":"http://mcp-gateway-data-science-gateway-class.{{ ocp4_workload_software_factory_namespace }}.svc.cluster.local/mcp","type":"http","authHeaderValue":"Bearer ${GITEA_TOKEN}","envFromSecret":"<user>-gitea-token"}'
+    agentoffice.ai/description: "Work with the in-cluster Gitea \u2014 repos, issues, PRs, releases, wiki \u2014 as YOUR seat's identity: gitea_* tools behind the MCP gateway, authenticated per call by\
+      \ the seat's own pass-through token."
+    agentoffice.ai/display-name: Gitea (governed)
+  finalizers:
+  - mcp.kuadrant.io/finalizer
+  labels:
+    app.kubernetes.io/component: registration
+    app.kubernetes.io/managed-by: agent-office-gitops
+    app.kubernetes.io/name: gitea-mcp-server
+  name: gitea
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+spec:
+  category:
+  - uncategorised
+  credentialRef:
+    key: AUTHORIZATION
+    name: gitea-mcp-broker-token
+  path: /mcp
+  prefix: gitea_
+  state: Enabled
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: gitea-mcp-server-route
+  userSpecificList: Disabled

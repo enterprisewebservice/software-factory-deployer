@@ -67,7 +67,7 @@ keycloak_user_password: ""            # generated per-order (lookup('password', 
 
 # Stage selection. A list, or a comma-separated string when passed as an extra-var (the Field
 # Content Job does that). The first RHDP order runs: operators,showroom,userinfo
-software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, seats, showroom, verify, userinfo]
+software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, seats, mcp_gateway, showroom, verify, userinfo]
 cluster_domain: ""                    # derived from ingresses.config.openshift.io/cluster when empty
 
 # Showroom: one lab guide per seat (user1..N), the RHDP multi-user model

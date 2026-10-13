@@ -1,0 +1,274 @@
+# MCP gateway: vendored from agent-office/cluster/github-mcp/gateway (Gateway, extension, policies, RHCL 1.4 workarounds).
+# Gateway: mcp-gateway (Gateway API, Istio-controller)
+#
+# Dedicated Gateway for MCP traffic. We do NOT add listeners to the
+# existing data-science-gateway (it's owned by RHOAI's GatewayConfig
+# CR and any direct edits would be reverted by RHOAI's reconcile).
+#
+# Two listeners as required by the Kuadrant mcp-gateway operator:
+#
+#   mcp     — public-ish client listener that the MCPGatewayExtension
+#             attaches to via sectionName. PM Agent (openclaw) calls
+#             this listener over the cluster-internal Service.
+#             Port: 8888 (chosen to be obviously-not-default, avoids
+#             collision with other Service Mesh listeners).
+#
+#   mcps    — internal wildcard listener that backend HTTPRoutes
+#             attach to via parentRefs.sectionName=mcps. The broker
+#             reaches the backend via cluster-internal hostnames
+#             matching the wildcard (e.g. github-mcp.mcp.local).
+#             Port: 9999.
+#
+# Protocol: HTTP. This is cluster-internal traffic only — openclaw
+# pods reach the gateway via the cluster-internal Service DNS, and
+# the backend HTTPRoutes route to in-cluster Services. No external
+# exposure today (no Route, no LoadBalancer). For external clients
+# we'd add a third listener and TLS later.
+#
+# `allowedRoutes.namespaces.from: All` lets HTTPRoutes from any
+# namespace attach. We could restrict to a selector (e.g. only
+# agent-office), but for MVP All is simpler and the operator's
+# MCPServerRegistration mechanism is itself the access control
+# (only registered backends get federated).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: mcp-gateway
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: agent-office-gitops
+  annotations:
+    # Force the gateway-controller (Istio) to use a ClusterIP Service
+    # instead of LoadBalancer. The cluster has no external LB provider
+    # configured, so a LoadBalancer Service sits with EXTERNAL-IP
+    # pending forever and the Gateway's PROGRAMMED status stays False.
+    # Our MCP traffic is cluster-internal only — ClusterIP is correct.
+    networking.istio.io/service-type: ClusterIP
+spec:
+  gatewayClassName: data-science-gateway-class
+  # Both listeners share port 8888. This is REQUIRED by mcp-gateway
+  # operator v0.6.0 — `httpRouteAttachesToListener` filter at
+  # internal/controller/mcpgatewayextension.go:118-157 silently
+  # rejects HTTPRoutes whose attached listener has a different port
+  # from the MCPGatewayExtension's targetRef listener. The route
+  # is dropped from validNamespaces with no status update on the
+  # MCPServerRegistration — symptom is `servers: []` in the broker
+  # config Secret and a 404 from the broker on tools/list.
+  #
+  # Workaround: same port, different hostnames. The `mcp` listener
+  # accepts any Host (used by the broker's auto-generated front-door
+  # HTTPRoute on the operator-managed publicHost), and `mcps` accepts
+  # *.mcp.local (used by our backend HTTPRoutes). Istio routes by
+  # Host header between them.
+  #
+  # The upstream docs show separate ports (8888 + 9999) which is
+  # what made this hard to spot — the operator code doesn't match
+  # the documented topology. Bug worth filing upstream.
+  listeners:
+    - name: mcp
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: mcps
+      protocol: HTTP
+      port: 80
+      hostname: "*.mcp.local"
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+# MCPGatewayExtension — wires the mcp-gateway operator's broker-router
+# Envoy filter onto the `mcp` listener of our Gateway.
+#
+# The operator-managed broker (a pod running mcp-broker-router):
+#   - exposes the MCP protocol on the `mcp` listener
+#   - aggregates registered backends (see MCPServerRegistration CRs)
+#   - forwards user MCP requests to backends via their HTTPRoutes
+#     attached to the `mcps` listener
+#
+# httpRouteManagement: Enabled — the operator creates the front-door
+#   HTTPRoute (mcp-gateway-route) automatically, routing the `mcp`
+#   listener's traffic to the broker Service. We don't author that
+#   ourselves.
+#
+# trustedHeadersKey.generate: Enabled — the operator generates an
+#   ECDSA P-256 keypair the broker uses to sign trusted-header JWTs
+#   ("wristbands") carrying per-user tool-allowlists. Mandatory for
+#   any per-user tool filtering; harmless if we don't use it yet.
+#
+# sessionStore: omitted — single replica deployment, in-memory
+#   sessions are fine. Add a Redis URL secret later if we scale
+#   beyond one broker pod.
+apiVersion: mcp.kuadrant.io/v1alpha1
+kind: MCPGatewayExtension
+metadata:
+  name: mcp-gateway-extension
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/component: gateway-extension
+    app.kubernetes.io/managed-by: agent-office-gitops
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: mcp-gateway
+    namespace: {{ ocp4_workload_software_factory_namespace }}
+    sectionName: mcp
+  # publicHost: the externally-visible hostname agents use to reach
+  # the mcp listener. For cluster-internal MVP we use the
+  # gateway-controller-generated Service DNS.
+  #
+  # privateHost: the hostname the BROKER uses internally to call
+  # backends via the gateway (the broker → gateway → backend round
+  # trip when invoking a registered server's tool). Without this,
+  # the operator defaults to `mcp-gateway-istio.<ns>.svc.cluster.local`
+  # which assumes an Istio-style Service name. Our gateway-controller
+  # is OpenShift's data-science-gateway-class — it creates Services
+  # named `mcp-gateway-data-science-gateway-class.<ns>.svc.cluster.local`.
+  # We point privateHost at the right Service DNS so the broker can
+  # actually reach the backend through the same gateway.
+  publicHost: mcp-gateway-data-science-gateway-class.{{ ocp4_workload_software_factory_namespace }}.svc.cluster.local
+  privateHost: mcp-gateway-data-science-gateway-class.{{ ocp4_workload_software_factory_namespace }}.svc.cluster.local
+  httpRouteManagement: Enabled
+  trustedHeadersKey:
+    secretName: mcp-gateway-trusted-headers
+    generate: Enabled
+---
+# WHO may call WHAT through the MCP gateway — two Kuadrant AuthPolicies.
+#
+# The gateway is one Envoy listener (0.0.0.0_80) carrying two Gateway
+# sections: `mcp` (the front door every agent's `governed` MCP server points
+# at) and `mcps` (`*.mcp.local`, the hop the broker takes to each registered
+# backend). Filter chain: ext_proc(MCP router) -> ... -> wasm(Kuadrant) ->
+# router. Proven live 2026-09-02 (four bounded, self-reverting tests):
+#
+#   * Caller identity = the bearer token the operator already renders into
+#     each agent's MCP header. The SAME Secret is the Authorino API-key
+#     identity: seats' <user>-gitea-token and the platform's
+#     github-mcp-installation-token carry a second key `api_key` (== the
+#     token), the label agentoffice.ai/mcp-gateway-caller=true, and the
+#     annotations agentoffice.ai/mcp-servers (comma list of
+#     <namespace>/<MCPServerRegistration>, or "*") and
+#     agentoffice.ai/mcp-namespace (the caller's own namespace — every server
+#     registered THERE is allowed, so a seat's own registrations need no
+#     policy change). Rotation is safe: operator >= v1.7.46 re-renders the
+#     header from the Secret and Authorino watches the same Secret.
+#   * Front section `mcp` — AUTHENTICATION only. Tool names are not yet in
+#     the headers when the auth filter runs (the router sets them from the
+#     JSON-RPC body later), so this hop answers one question: is this a
+#     recognised caller? No token -> 401. /.well-known stays anonymous.
+#   * Backend section `mcps` — PER-TOOL AUTHORIZATION. The broker forwards
+#     the caller's own Authorization header to backends (gitea_get_me
+#     returns the seat's identity) and stamps x-mcp-method, x-mcp-toolname,
+#     x-mcp-servername (<namespace>/<registration>). Gated to method
+#     tools/call (and prompts/get, resources/read) so the broker's own
+#     discovery, pings and per-session initialize — which present the
+#     registration credential — are never touched. Denied -> 403 JSON naming
+#     tool and server, which the broker returns to the agent verbatim.
+#   * Prerequisite: gateway/authorino-tls-envoyfilter.yaml — RHCL's Authorino
+#     listens with TLS; without that filter the shim fails closed with 500.
+#
+# Vendor refs: Kuadrant mcp-gateway docs/guides/authorization.md (x-mcp-*
+# headers, `mcps` attachment) and authentication.md (front door, /.well-known).
+# Visibility filtering of tools/list (signed x-mcp-authorized wristband) is a
+# separate optional step: the broker's filter wants explicit per-server tool
+# lists and has no wildcard.
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: mcp-gateway-callers
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/component: caller-authentication
+    app.kubernetes.io/managed-by: agent-office-gitops
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: mcp-gateway
+    sectionName: mcp
+  when:
+    - predicate: "!request.path.startsWith('/.well-known/')"
+  rules:
+    authentication:
+      "gateway-callers":
+        apiKey:
+          selector:
+            matchLabels:
+              agentoffice.ai/mcp-gateway-caller: "true"
+          allNamespaces: true
+        credentials:
+          authorizationHeader:
+            prefix: Bearer
+    response:
+      unauthenticated:
+        code: 401
+        headers:
+          "WWW-Authenticate":
+            value: Bearer realm="mcp-gateway"
+        body:
+          value: '{"error":"Unauthorized","message":"MCP access denied: no recognised caller token. Send Authorization: Bearer <your seat token>."}'
+---
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: mcp-gateway-tool-access
+  namespace: {{ ocp4_workload_software_factory_namespace }}
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+    app.kubernetes.io/component: tool-authorization
+    app.kubernetes.io/managed-by: agent-office-gitops
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: mcp-gateway
+    sectionName: mcps
+  when:
+    - predicate: "'x-mcp-method' in request.headers && request.headers['x-mcp-method'] in ['tools/call', 'prompts/get', 'resources/read']"
+  rules:
+    authentication:
+      "gateway-callers":
+        apiKey:
+          selector:
+            matchLabels:
+              agentoffice.ai/mcp-gateway-caller: "true"
+          allNamespaces: true
+        credentials:
+          authorizationHeader:
+            prefix: Bearer
+    authorization:
+      "server-allow-list":
+        opa:
+          rego: |
+            # Authorino prepends `default allow = false` itself.
+            headers := input.context.request.http.headers
+            server := object.get(headers, "x-mcp-servername", "")
+            ann := object.get(object.get(input.auth.identity, "metadata", {}), "annotations", {})
+            allowed := split(object.get(ann, "agentoffice.ai/mcp-servers", ""), ",")
+            home := object.get(ann, "agentoffice.ai/mcp-namespace", "")
+
+            # platform callers: every registered server
+            allow { allowed[_] == "*" }
+
+            # a server this identity lists explicitly (<namespace>/<registration>)
+            allow { allowed[_] == server }
+
+            # any server registered in the caller's own namespace
+            allow { home != ""; startswith(server, sprintf("%s/", [home])) }
+    response:
+      unauthenticated:
+        code: 401
+        body:
+          value: '{"error":"Unauthorized","message":"MCP access denied: caller token not recognised on the backend hop."}'
+      unauthorized:
+        code: 403
+        body:
+          expression: |
+            '{"error":"Forbidden","message":"MCP access denied: this caller may not use tool ' + ('x-mcp-toolname' in request.headers ? request.headers['x-mcp-toolname'] : '?') + ' on server ' + ('x-mcp-servername' in request.headers ? request.headers['x-mcp-servername'] : '?') + '. Ask the platform to add that server to your seat allow-list."}'
