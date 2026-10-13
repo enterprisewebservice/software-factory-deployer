@@ -73,18 +73,30 @@ spec:
           mkdir -p /tmp/ansible
           cd /tmp/ansible
 
+          # Nobody is watching an order: every step that crosses the network retries on its
+          # own (a DNS blip seconds after pod start failed a run on 13 October 2026).
+          retry() {
+            local n=0
+            until "$@"; do
+              n=$((n + 1))
+              if [ "$n" -ge 8 ]; then echo "giving up after $n attempts: $*"; return 1; fi
+              echo "attempt $n failed, retrying in 15s: $*"
+              sleep 15
+            done
+          }
+
           echo "=== Installing Python packages ==="
-          pip install --quiet --upgrade pip
-          pip install --quiet -r /config/requirements.txt
+          retry pip install --quiet --upgrade pip
+          retry pip install --quiet -r /config/requirements.txt
 
           echo "=== Installing Helm (showroom stage) ==="
-          curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz -C /tmp
+          retry sh -c 'curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz -C /tmp'
           mv /tmp/linux-amd64/helm /opt/app-root/bin/
           helm version --short
 
           echo "=== Installing Ansible collections ==="
           while read collection; do
-            [ -z "$collection" ] || ansible-galaxy collection install "$collection" --force
+            [ -z "$collection" ] || retry ansible-galaxy collection install "$collection" --force
           done < /config/collections.txt
 
           cp /config/ansible.cfg /tmp/ansible/
@@ -113,11 +125,11 @@ spec:
 
           echo "=== Cloning the deployer repository ==="
           {{- if .Values.ansible.repository.secretName }}
-          git clone --branch ${GIT_REPO_BRANCH} \
+          retry git clone --branch ${GIT_REPO_BRANCH} \
             https://${GIT_USERNAME}:${GIT_PASSWORD}@$(echo ${GIT_REPO_URL} | sed 's|https://||') \
             /tmp/ansible/playbooks
           {{- else }}
-          git clone --branch ${GIT_REPO_BRANCH} ${GIT_REPO_URL} /tmp/ansible/playbooks
+          retry git clone --branch ${GIT_REPO_BRANCH} ${GIT_REPO_URL} /tmp/ansible/playbooks
           {{- end }}
           {{- if .Values.ansible.repository.path }}
           cd /tmp/ansible/playbooks/{{ .Values.ansible.repository.path }}
