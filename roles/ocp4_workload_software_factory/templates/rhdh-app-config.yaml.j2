@@ -1,0 +1,101 @@
+# Developer Hub app-config for a workshop cluster. Shape mirrors the reference cluster
+# (rhdh-test on salamander, chart redhat-developer-hub 1.9.2); credentials arrive as env vars
+# from Secrets (extraEnvVarsSecrets), never inline.
+app:
+  title: Developer Hub
+  baseUrl: https://{{ rhdh_host }}
+auth:
+  environment: production
+  session:
+    secret: ${BACKEND_SECRET}
+  providers:
+    oidc:
+      production:
+        metadataUrl: ${OIDC_METADATA_URL}
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: ${OIDC_CLIENT_SECRET}
+        prompt: auto
+        signIn:
+          resolvers:
+            - resolver: preferredUsernameMatchingUserEntityName
+signInPage: oidc
+enableExperimentalRedirectFlow: true
+integrations:
+  gitea:
+    - host: {{ gitea_host }}
+      username: ${GITEA_USERNAME}
+      password: ${GITEA_PASSWORD}
+argocd:
+  username: ${ARGOCD_USERNAME}
+  password: ${ARGOCD_PASSWORD}
+  appLocatorMethods:
+    - type: config
+      instances:
+        - name: default
+          url: {{ _gitops_url }}
+          username: ${ARGOCD_USERNAME}
+          password: ${ARGOCD_PASSWORD}
+backend:
+  baseUrl: https://{{ rhdh_host }}
+  cors:
+    origin: https://{{ rhdh_host }}
+  reading:
+    allow:
+      - host: agent-office-backstage-catalog.agent-office-operator.svc.cluster.local
+      - host: {{ gitea_host }}
+catalog:
+  rules:
+    - allow: [Template, Location, Component, User, Group, API, System, Resource]
+  locations:
+    - type: url
+      target: https://{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}/src/branch/main/samples/templates/openclaw-agent-genesis/template.yaml
+      rules:
+        - allow: [Template]
+{% if rhdh_operator_catalog | bool %}
+    - type: url
+      target: http://agent-office-backstage-catalog.agent-office-operator.svc.cluster.local/backstage/catalog.yaml
+      rules:
+        - allow: [Resource]
+{% endif %}
+  providers:
+    keycloakOrg:
+      default:
+        baseUrl: {{ keycloak_url }}
+        loginRealm: {{ keycloak_realm }}
+        realm: {{ keycloak_realm }}
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: ${OIDC_CLIENT_SECRET}
+        schedule:
+          frequency: { minutes: 1 }
+          initialDelay: { seconds: 15 }
+          timeout: { minutes: 1 }
+kubernetes:
+  customResources:
+    - group: agentoffice.ai
+      apiVersion: v1alpha1
+      plural: agentworkstations
+    - group: agentoffice.ai
+      apiVersion: v1alpha1
+      plural: agentgateways
+    - group: tekton.dev
+      apiVersion: v1
+      plural: pipelineruns
+    - group: tekton.dev
+      apiVersion: v1
+      plural: taskruns
+permission:
+  enabled: true
+  rbac:
+    admin:
+      users:
+        - name: user:default/{{ rhdh_super_user }}
+      superUsers:
+        - name: user:default/{{ rhdh_super_user }}
+    policies-csv-file: /opt/app-root/src/rbac/rbac-policy.csv
+    conditionalPoliciesFile: /opt/app-root/src/rbac/conditional-policies.yaml
+    policyFileReload: true
+    pluginsWithPermission:
+      - catalog
+      - scaffolder
+      - permission
+      - kubernetes

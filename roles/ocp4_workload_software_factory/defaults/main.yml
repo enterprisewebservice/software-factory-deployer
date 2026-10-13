@@ -93,3 +93,11 @@ keycloak_realm_fallback: sso          # used only if no realm holds user1
 workshop_attendees_group: attendees   # Keycloak group; Developer Hub RBAC and ModelConnection access key on it
 rhdh_host: "devhub.{{ cluster_domain }}"
 maas_external_provider_model: ""
+
+# Developer Hub (Helm chart, as on the reference cluster)
+rhdh_release: rhdh
+rhdh_chart_version: "1.9.2"
+rhdh_super_user: admin                # the base's admin user, present in the Keycloak realm
+rhdh_custom_plugins: false            # the workshop's own plugins at quay.io/dpeterso; true once those repos are public
+rhdh_operator_catalog: false          # register the operator's Backstage catalog once the operator is installed
+keycloak_realm: "{{ keycloak_realm_fallback }}"

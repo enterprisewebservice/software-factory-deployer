@@ -1,0 +1,39 @@
+---
+result: CONDITIONAL
+roleEntityRef: 'role:default/attendee'
+pluginId: catalog
+resourceType: catalog-entity
+permissionMapping:
+  - read
+  - update
+conditions:
+  anyOf:
+    - rule: IS_ENTITY_OWNER
+      resourceType: catalog-entity
+      params:
+        claims:
+          - $ownerRefs
+    - rule: IS_ENTITY_KIND
+      resourceType: catalog-entity
+      params:
+        kinds:
+          - User
+          - Group
+          - System
+          - Domain
+    # Attendees see exactly ONE template: the workshop's "OpenClaw
+    # Agent" (the Gitea-routed mirror, entity openclaw-agent-genesis).
+    # The GitHub-direct registration, the advanced/autoresearch
+    # templates and the stock RHDH samples stay out of their
+    # Self-service list (Dean, 2026-09-02).
+    - allOf:
+        - rule: IS_ENTITY_KIND
+          resourceType: catalog-entity
+          params:
+            kinds:
+              - Template
+        - rule: HAS_METADATA
+          resourceType: catalog-entity
+          params:
+            key: name
+            value: openclaw-agent-genesis

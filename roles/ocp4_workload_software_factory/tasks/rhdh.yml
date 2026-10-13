@@ -1,36 +1,189 @@
 ---
-# TODO(iteration-1, first test cluster): implement the rhdh INSTALL stage.
-# See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
-#
-# The gitea-specific wiring is already concrete and waiting for the install
-# to exist around it:
-#   - templates/rhdh-app-config-gitea-fragment.yaml.j2 — integrations.gitea
-#     (credentials via {{ gitea_rhdh_secret_name }}, created by gitea.yml)
-#     + the catalog Location for the mirrored golden-path template. Merge
-#     into the app-config this stage renders when git_provider == gitea.
-#   - the dynamic-plugins list this stage renders must include
-#     {{ rhdh_gitea_scaffolder_plugin }} (publish:gitea is NOT in RHDH's
-#     bundled dist — github/gitlab only). The reference copy source,
-#     agent-office/cluster/rhdh/dynamic-plugins-configmap.yaml, already
-#     carries the entry.
-#   - rhdh_gitea_templates.yml (included below) mirrors the pinned template
-#     repo into Gitea with the two-default registration rewrite.
-#   - RBAC / catalog isolation (verified live 2026-08-25): app-config gets
-#     permission.enabled=true + permission.rbac (superUsers = the platform
-#     owner; policies-csv-file + conditionalPoliciesFile + policyFileReload
-#     pointing at /opt/app-root/src/rbac/), a ConfigMap with the policy
-#     files mounted there, and the backstage-community-plugin-rbac frontend
-#     plugin enabled. Reference copy: agent-office/cluster/rhdh/
-#     rbac-policies-configmap.yaml — role:default/attendee bound to
-#     group:default/attendees with conditional catalog read ($ownerRefs +
-#     shared kinds). Without this, every attendee sees the whole catalog.
-#     Attendees must exist in the catalog BEFORE doors open (keycloak_users
-#     stage + keycloakOrg ingestion tick) or first sign-ins fail to resolve.
-# All shapes were verified live on salamander 2026-08-24/25.
-- name: "rhdh stage placeholder (install)"
-  ansible.builtin.debug:
-    msg: "TODO: rhdh install (operator, app-config from fragments, keycloak auth)"
+# Developer Hub stage, RHDP flavour. Same shape as the reference cluster (Helm chart
+# redhat-developer-hub, OIDC sign-in against the cluster's Keycloak, Gitea and Argo CD
+# integrations, RBAC plugin with the attendee role, the golden-path template mirrored into
+# Gitea), rendered from the facts earlier stages set: gitea_host, keycloak_realm, _gitops_url.
+# Credentials reach the pod as env vars from Secrets created here or by earlier stages:
+#   rhdh-workshop-oidc (keycloak stage), rhdh-gitea-credentials (gitea stage),
+#   rhdh-argocd-credentials and rhdh-k8s-credentials (this stage).
 
+- name: rhdh | namespace
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: "{{ rhdh_namespace }}" } }
+
+# --- kubernetes plugin identity: read-only across the cluster, token in a Secret
+- name: rhdh | kubernetes plugin service account and read-only ClusterRole
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - { apiVersion: v1, kind: ServiceAccount, metadata: { name: rhdh-k8s, namespace: "{{ rhdh_namespace }}" } }
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata: { name: rhdh-k8s-reader }
+      rules:
+        - { apiGroups: ["*"], resources: ["*"], verbs: [get, list, watch] }
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata: { name: rhdh-k8s-reader }
+      roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: rhdh-k8s-reader }
+      subjects: [{ kind: ServiceAccount, name: rhdh-k8s, namespace: "{{ rhdh_namespace }}" }]
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: rhdh-k8s-token
+        namespace: "{{ rhdh_namespace }}"
+        annotations: { kubernetes.io/service-account.name: rhdh-k8s }
+      type: kubernetes.io/service-account-token
+  loop_control: { label: "{{ item.kind }}" }
+
+- name: rhdh | wait for the service account token
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: rhdh-k8s-token
+    namespace: "{{ rhdh_namespace }}"
+  register: r_k8s_token
+  until: r_k8s_token.resources | length > 0 and (r_k8s_token.resources[0].data.token | default('')) | length > 0
+  retries: 20
+  delay: 3
+  no_log: true
+
+- name: rhdh | Argo CD admin password (OpenShift GitOps)
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: openshift-gitops-cluster
+    namespace: openshift-gitops
+  register: r_argo_admin
+  no_log: true
+
+- name: rhdh | credential Secrets for the plugins
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: "{{ item.name }}", namespace: "{{ rhdh_namespace }}" }
+      type: Opaque
+      stringData: "{{ item.data }}"
+  loop:
+    - name: rhdh-k8s-credentials
+      data:
+        K8S_CLUSTER_NAME: local
+        K8S_CLUSTER_URL: https://kubernetes.default.svc
+        K8S_CLUSTER_TOKEN: "{{ r_k8s_token.resources[0].data.token | b64decode }}"
+    - name: rhdh-argocd-credentials
+      data:
+        ARGOCD_USERNAME: admin
+        ARGOCD_PASSWORD: "{{ r_argo_admin.resources[0].data['admin.password'] | b64decode }}"
+  loop_control: { label: "{{ item.name }}" }
+  no_log: true
+
+# --- configuration: RBAC files and app-config
+- name: rhdh | RBAC policies ConfigMap (attendee role, conditional ownership)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: { name: rbac-policies, namespace: "{{ rhdh_namespace }}" }
+      data:
+        rbac-policy.csv: "{{ lookup('template', 'rhdh-rbac-policy.csv.j2') }}"
+        conditional-policies.yaml: "{{ lookup('file', 'rhdh-conditional-policies.yaml') }}"
+
+- name: rhdh | app-config ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: { name: rhdh-app-config, namespace: "{{ rhdh_namespace }}" }
+      data:
+        app-config.yaml: "{{ lookup('template', 'rhdh-app-config.yaml.j2') }}"
+
+- name: rhdh | dynamic plugin list
+  ansible.builtin.set_fact:
+    _rhdh_plugins: >-
+      {{ (lookup('template', 'rhdh-dynamic-plugins-base.yaml.j2') | from_yaml)
+         + ((lookup('template', 'rhdh-dynamic-plugins-custom.yaml.j2') | from_yaml) if (rhdh_custom_plugins | bool) else []) }}
+
+# --- the golden-path template, mirrored into Gitea with this cluster's defaults
 - name: rhdh | golden-path template mirror + registration rewrite (gitea)
   ansible.builtin.include_tasks: rhdh_gitea_templates.yml
   when: git_provider == 'gitea'
+
+# --- the Helm release
+- name: rhdh | Helm release {{ rhdh_release }} (chart {{ rhdh_chart_version }})
+  kubernetes.core.helm:
+    name: "{{ rhdh_release }}"
+    release_namespace: "{{ rhdh_namespace }}"
+    chart_repo_url: https://charts.openshift.io
+    chart_ref: redhat-developer-hub
+    chart_version: "{{ rhdh_chart_version }}"
+    wait: false
+    values:
+      global:
+        clusterRouterBase: "{{ cluster_domain }}"
+        host: "{{ rhdh_host }}"
+        dynamic:
+          includes: [dynamic-plugins.default.yaml]
+          plugins: "{{ _rhdh_plugins }}"
+      nameOverride: developer-hub
+      route:
+        enabled: true
+        host: "{{ rhdh_host }}"
+        tls:
+          enabled: true
+          termination: edge
+          insecureEdgeTerminationPolicy: Redirect
+      upstream:
+        backstage:
+          appConfig:
+            app: { baseUrl: "https://{{ rhdh_host }}" }
+            backend:
+              baseUrl: "https://{{ rhdh_host }}"
+              cors: { origin: "https://{{ rhdh_host }}" }
+          extraAppConfig:
+            - configMapRef: rhdh-app-config
+              filename: app-config.yaml
+          extraEnvVarsSecrets:
+            - rhdh-workshop-oidc
+            - rhdh-gitea-credentials
+            - rhdh-argocd-credentials
+            - rhdh-k8s-credentials
+          extraVolumeMounts:
+            - { name: dynamic-plugins-root, mountPath: /opt/app-root/src/dynamic-plugins-root }
+            - { name: temp, mountPath: /tmp }
+            - { name: rbac-policies, mountPath: /opt/app-root/src/rbac }
+          extraVolumes:
+            - name: dynamic-plugins-root
+              ephemeral:
+                volumeClaimTemplate:
+                  spec:
+                    accessModes: [ReadWriteOnce]
+                    resources: { requests: { storage: 5Gi } }
+            - { name: temp, emptyDir: {} }
+            - { name: rbac-policies, configMap: { name: rbac-policies } }
+  register: r_rhdh_helm
+  retries: 3
+  delay: 30
+  until: r_rhdh_helm is success
+
+- name: rhdh | wait for Developer Hub to become available (dynamic plugins install at start)
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ rhdh_release }}-developer-hub"
+    namespace: "{{ rhdh_namespace }}"
+  register: r_rhdh_dep
+  until: r_rhdh_dep.resources | length > 0 and (r_rhdh_dep.resources[0].status.availableReplicas | default(0)) | int >= 1
+  retries: 60
+  delay: 15
+
+- name: rhdh | facts for the guides and userinfo
+  ansible.builtin.set_fact:
+    _devhub_url: "https://{{ rhdh_host }}"
+
+- name: rhdh | ready
+  ansible.builtin.debug:
+    msg: "Developer Hub at {{ _devhub_url }} (OIDC realm {{ keycloak_realm }}, Gitea {{ gitea_host }}, custom plugins {{ rhdh_custom_plugins }})"

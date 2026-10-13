@@ -151,6 +151,48 @@
       loop: "{{ r_kc_clients.results }}"
       loop_control: { label: "{{ item.item }}" }
 
+    - name: keycloak | the Developer Hub client gets a service account (keycloakOrg provider)
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients/{{ (r_kc_clients.results | selectattr('item', 'equalto', 'rhdh') | first).json[0].id }}"
+        method: PUT
+        headers: "{{ _kc_h }}"
+        body_format: json
+        body: "{{ (r_kc_clients.results | selectattr('item', 'equalto', 'rhdh') | first).json[0] | combine({'serviceAccountsEnabled': true}) }}"
+        status_code: [204]
+        validate_certs: false
+
+    - name: keycloak | realm-management client and its roles
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients?clientId=realm-management"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      register: r_kc_rm
+
+    - name: keycloak | roles the provider needs
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients/{{ r_kc_rm.json[0].id }}/roles/{{ item }}"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      loop: [view-users, query-users, query-groups]
+      register: r_kc_roles
+
+    - name: keycloak | service-account user of the Developer Hub client
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients/{{ (r_kc_clients.results | selectattr('item', 'equalto', 'rhdh') | first).json[0].id }}/service-account-user"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      register: r_kc_sa
+
+    - name: keycloak | grant the roles
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/users/{{ r_kc_sa.json.id }}/role-mappings/clients/{{ r_kc_rm.json[0].id }}"
+        method: POST
+        headers: "{{ _kc_h }}"
+        body_format: json
+        body: "{{ r_kc_roles.results | map(attribute='json') | list }}"
+        status_code: [204]
+        validate_certs: false
+
     - name: keycloak | client secrets
       ansible.builtin.uri:
         url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients/{{ item.json[0].id }}/client-secret"

@@ -1,0 +1,77 @@
+# The workshop's own Developer Hub plugins (entity picker, agent binders, Codex re-auth),
+# published at quay.io/dpeterso. Enabled once those repositories are public.
+- disabled: false
+  package: oci://quay.io/dpeterso/agent-office-source-filtered-entity-picker:v0.0.4!agent-office-backstage-plugin-source-filtered-entity-picker
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        agent-office-backstage-plugin-source-filtered-entity-picker:
+          scaffolderFieldExtensions:
+          - importName: sourceFilteredEntityPickerFieldExtension
+            module: PluginRoot
+- disabled: false
+  package: oci://quay.io/dpeterso/agent-office-codex-reauth-backend:v0.0.5!agent-office-backstage-plugin-codex-reauth-backend
+- disabled: false
+  package: oci://quay.io/dpeterso/agent-office-codex-reauth-ui:v0.0.6!agent-office-backstage-plugin-codex-reauth-ui
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        agent-office-backstage-plugin-codex-reauth-ui:
+          mountPoints:
+          - config:
+              if:
+                allOf:
+                - isKind: component
+                - hasAnnotation: agentoffice.ai/agent-kind
+              layout:
+                gridColumn: 1 / -1
+                gridRowEnd: span 2
+            importName: CodexAuthCard
+            mountPoint: entity.page.overview/cards
+          scaffolderFieldExtensions:
+          - importName: codexAuthPreflightFieldExtension
+            module: PluginRoot
+    proxy:
+      endpoints:
+        /agent-office:
+          changeOrigin: true
+          target: http://agent-office.agent-office.svc.cluster.local:8080
+- disabled: false
+  package: oci://quay.io/dpeterso/agent-office-agentworkstation-binders:v0.0.29!agent-office-backstage-plugin-agentworkstation-binders
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        agent-office-backstage-plugin-agentworkstation-binders:
+          mountPoints:
+          - config:
+              if:
+                anyOf:
+                - hasAnnotation: agentoffice.ai/agent-kind
+              layout:
+                gridColumnEnd:
+                  lg: span 12
+                  md: span 12
+                  xs: span 12
+            importName: AgentBindingsCard
+            module: PluginRoot
+            mountPoint: entity.page.overview/cards
+          scaffolderFieldExtensions:
+          - importName: agentComposerFieldExtension
+            module: PluginRoot
+          - importName: agentGenesisFieldExtension
+            module: PluginRoot
+    proxy:
+      endpoints:
+        /agent-office-binders:
+          changeOrigin: true
+          pathRewrite:
+            ^/api/proxy/agent-office-binders/?: /binders/
+          target: http://agent-office-backstage-catalog.agent-office-operator.svc.cluster.local
+        /agent-office-catalog:
+          allowedMethods:
+          - GET
+          - POST
+          changeOrigin: true
+          pathRewrite:
+            ^/api/proxy/agent-office-catalog/?: /catalog/
+          target: http://agent-office-backstage-catalog.agent-office-operator.svc.cluster.local

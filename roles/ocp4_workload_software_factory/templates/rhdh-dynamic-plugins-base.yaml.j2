@@ -1,0 +1,57 @@
+# Developer Hub dynamic plugins: the reference cluster's enabled list minus the gateway
+# and model-chat plugins (later stages). Source: agent-office/cluster/rhdh/dynamic-plugins-configmap.yaml
+- package: ./dynamic-plugins/dist/backstage-community-plugin-catalog-backend-module-keycloak-dynamic
+  disabled: false
+- package: ./dynamic-plugins/dist/backstage-community-plugin-rbac
+  disabled: false
+- package: ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-github-dynamic
+  disabled: false
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-plugin-scaffolder-backend-module-gitea:bs_1.45.3__0.2.15!backstage-plugin-scaffolder-backend-module-gitea
+  disabled: false
+- package: ./dynamic-plugins/dist/roadiehq-scaffolder-backend-argocd-dynamic
+  disabled: false
+- package: ./dynamic-plugins/dist/backstage-plugin-kubernetes-backend-dynamic
+  disabled: false
+  pluginConfig:
+    kubernetes:
+      serviceLocatorMethod:
+        type: multiTenant
+      clusterLocatorMethods:
+      - type: config
+        clusters:
+        - name: ${K8S_CLUSTER_NAME}
+          url: ${K8S_CLUSTER_URL}
+          authProvider: serviceAccount
+          skipTLSVerify: true
+          serviceAccountToken: ${K8S_CLUSTER_TOKEN}
+- package: ./dynamic-plugins/dist/backstage-plugin-kubernetes
+  disabled: false
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        backstage.plugin-kubernetes:
+          mountPoints:
+          - mountPoint: entity.page.kubernetes/cards
+            importName: EntityKubernetesContent
+            config:
+              layout:
+                gridColumn: 1 / -1
+              if:
+                anyOf:
+                - hasAnnotation: backstage.io/kubernetes-id
+                - hasAnnotation: backstage.io/kubernetes-namespace
+- package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-tekton:bs_1.45.3__3.33.3
+  disabled: false
+  pluginConfig:
+    dynamicPlugins:
+      frontend:
+        backstage-community.plugin-tekton:
+          mountPoints:
+          - mountPoint: entity.page.ci/cards
+            importName: TektonCI
+            config:
+              layout:
+                gridColumn: 1 / -1
+              if:
+                allOf:
+                - isTektonCIAvailable
