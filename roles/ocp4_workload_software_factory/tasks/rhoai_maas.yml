@@ -1,6 +1,86 @@
 ---
-# TODO(iteration-1, first test cluster): implement rhoai_maas stage.
-# See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
-- name: "rhoai_maas stage placeholder"
+# Models stage. First iteration: the LiteMaaS key RHDP issues with the order becomes a
+# ModelConnection every seat may pick (the operator renders it into the gateways). The
+# OpenShift AI MaaS lane (Module 7, "swap the brain") layers on top of this later.
+#
+# Inputs (from the chart, when the order enabled LiteMaaS):
+#   maas_external_provider_url    e.g. https://maas-rhdp.apps.maas.redhatworkshops.io/v1
+#   maas_external_provider_secret Secret in the runner namespace with apiUrl/apiKey/model
+#   maas_external_provider_model  default model id
+
+- name: models | skip when the order issued no model key
   ansible.builtin.debug:
-    msg: "TODO: rhoai_maas"
+    msg: "no LiteMaaS key injected by RHDP; no ModelConnection created"
+  when: maas_external_provider_url | length == 0 or maas_external_provider_secret | length == 0
+
+- name: models | ModelConnection wiring
+  when: maas_external_provider_url | length > 0 and maas_external_provider_secret | length > 0
+  block:
+    - name: models | is the ModelConnection API served yet?
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: modelconnections.agentoffice.ai
+      register: r_mc_crd
+
+    - name: models | operator not installed yet, connection deferred to the next run
+      ansible.builtin.debug:
+        msg: "modelconnections.agentoffice.ai is not served; install the agent-office operator first"
+      when: r_mc_crd.resources | length == 0
+
+    - name: models | read the key RHDP issued
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: "{{ maas_external_provider_secret }}"
+        namespace: "{{ userinfo_namespace }}"
+      register: r_maas_secret
+      no_log: true
+
+    - name: models | platform admin namespace and the connection's key Secret
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+      loop:
+        - { apiVersion: v1, kind: Namespace, metadata: { name: "{{ ocp4_workload_software_factory_namespace }}" } }
+        - apiVersion: v1
+          kind: Secret
+          metadata:
+            name: rhdp-litemaas-api-key
+            namespace: "{{ ocp4_workload_software_factory_namespace }}"
+          type: Opaque
+          stringData:
+            api-key: "{{ r_maas_secret.resources[0].data.apiKey | b64decode }}"
+      loop_control: { label: "{{ item.kind }}" }
+      no_log: true
+
+    - name: models | ModelConnection for every workshop seat
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: agentoffice.ai/v1alpha1
+          kind: ModelConnection
+          metadata:
+            name: rhdp-litemaas
+          spec:
+            displayName: "Workshop model ({{ maas_external_provider_model }})"
+            description: "The model endpoint RHDP issued with this order (LiteMaaS). Shared key, 7-day validity."
+            kind: endpoint
+            provider: custom
+            api: openai-completions
+            baseUrl: "{{ maas_external_provider_url }}"
+            apiKeySecretRef:
+              name: rhdp-litemaas-api-key
+              namespace: "{{ ocp4_workload_software_factory_namespace }}"
+              key: api-key
+            keyStrategy: shared
+            models:
+              - id: "{{ maas_external_provider_model }}"
+                name: "{{ maas_external_provider_model }}"
+            access:
+              groups: ["{{ workshop_attendees_group }}"]
+      when: r_mc_crd.resources | length > 0
+
+    - name: models | connection in place
+      ansible.builtin.debug:
+        msg: "ModelConnection rhdp-litemaas -> {{ maas_external_provider_url }} ({{ maas_external_provider_model }})"
+      when: r_mc_crd.resources | length > 0

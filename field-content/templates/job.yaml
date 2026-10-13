@@ -139,6 +139,9 @@ spec:
           {{- if .Values.multi_user }}
           EXTRA_VARS="$EXTRA_VARS num_users={{ .Values.multi_user.num_users | default 1 }}"
           {{- end }}
+          {{- if and .Values.keycloak .Values.keycloak.adminPassword }}
+          EXTRA_VARS="$EXTRA_VARS keycloak_url={{ .Values.keycloak.consoleUrl | trimSuffix "/" }} keycloak_admin_secret=field-content-keycloak"
+          {{- end }}
           {{- if and .Values.litemaas .Values.litemaas.enabled }}
           EXTRA_VARS="$EXTRA_VARS maas_external_provider_url={{ .Values.litemaas.apiUrl }} maas_external_provider_secret=field-content-litemaas maas_external_provider_model={{ .Values.litemaas.model }}"
           {{- end }}

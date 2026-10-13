@@ -85,3 +85,11 @@ gitea_operator_channel: stable
 gitea_image: quay.io/rhpds/gitea
 gitea_image_tag: "1.24.6"
 workshop_user_password: ""            # generated per order (workshop_password.yml) unless keycloak_user_password is set
+
+# Keycloak (RHDP base provides it; the chart passes the admin credentials)
+keycloak_url: ""                      # https://sso.<apps domain>, from the chart
+keycloak_admin_secret: ""             # Secret in the runner namespace: adminUser/adminPassword
+keycloak_realm_fallback: sso          # used only if no realm holds user1
+workshop_attendees_group: attendees   # Keycloak group; Developer Hub RBAC and ModelConnection access key on it
+rhdh_host: "devhub.{{ cluster_domain }}"
+maas_external_provider_model: ""

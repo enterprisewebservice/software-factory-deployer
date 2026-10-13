@@ -1,6 +1,198 @@
 ---
-# TODO(iteration-1, first test cluster): implement keycloak_users stage.
-# See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
-- name: "keycloak_users stage placeholder"
+# Keycloak stage, RHDP flavour. The base already runs Red Hat build of Keycloak with user1..N
+# and an OpenShift client, and hands this chart the admin credentials. This stage adds what
+# the workshop needs in that realm: an attendees group holding user1..N, and OIDC clients for
+# Developer Hub and Gitea, with their client secrets stored where those installs read them.
+#
+# Inputs (from the chart): keycloak_url, keycloak_admin_secret (admin user/password in the
+# runner namespace). Everything here is idempotent against the Keycloak admin REST API.
+
+- name: keycloak | skip when the base did not hand us Keycloak
   ansible.builtin.debug:
-    msg: "TODO: keycloak_users"
+    msg: "no Keycloak admin credentials injected; SSO clients not created"
+  when: keycloak_url | length == 0 or keycloak_admin_secret | length == 0
+
+- name: keycloak | clients and groups
+  when: keycloak_url | length > 0 and keycloak_admin_secret | length > 0
+  block:
+    - name: keycloak | admin credentials
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: "{{ keycloak_admin_secret }}"
+        namespace: "{{ userinfo_namespace }}"
+      register: r_kc_admin
+      no_log: true
+
+    - name: keycloak | admin token
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/realms/master/protocol/openid-connect/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: password
+          client_id: admin-cli
+          username: "{{ r_kc_admin.resources[0].data.adminUser | b64decode }}"
+          password: "{{ r_kc_admin.resources[0].data.adminPassword | b64decode }}"
+        validate_certs: false
+      register: r_kc_token
+      retries: 10
+      delay: 15
+      until: r_kc_token.status == 200
+      no_log: true
+
+    - name: keycloak | auth header
+      ansible.builtin.set_fact:
+        _kc_h: { Authorization: "Bearer {{ r_kc_token.json.access_token }}" }
+      no_log: true
+
+    - name: keycloak | realms
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      register: r_kc_realms
+
+    # the realm that holds user1 is the one the base created for this order
+    - name: keycloak | find the realm holding {{ keycloak_user_prefix }}1
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ item.realm }}/users?username={{ keycloak_user_prefix }}1&exact=true"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      loop: "{{ r_kc_realms.json | rejectattr('realm', 'equalto', 'master') | list }}"
+      loop_control: { label: "{{ item.realm }}" }
+      register: r_kc_find
+
+    - name: keycloak | realm
+      ansible.builtin.set_fact:
+        keycloak_realm: "{{ (r_kc_find.results | selectattr('json', 'defined') | selectattr('json', 'truthy') | map(attribute='item.realm') | list | first) | default(keycloak_realm_fallback) }}"
+
+    - name: keycloak | attendees group
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/groups"
+        method: POST
+        headers: "{{ _kc_h }}"
+        body_format: json
+        body: { name: "{{ workshop_attendees_group }}" }
+        status_code: [201, 409]
+        validate_certs: false
+
+    - name: keycloak | attendees group id
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/groups?search={{ workshop_attendees_group }}&exact=true"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      register: r_kc_group
+
+    - name: keycloak | user ids
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/users?username={{ keycloak_user_prefix }}{{ item }}&exact=true"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      loop: "{{ range(1, num_users | int + 1) | list }}"
+      loop_control: { label: "{{ keycloak_user_prefix }}{{ item }}" }
+      register: r_kc_users
+
+    - name: keycloak | user1..N join the attendees group
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/users/{{ item.json[0].id }}/groups/{{ r_kc_group.json[0].id }}"
+        method: PUT
+        headers: "{{ _kc_h }}"
+        status_code: [204]
+        validate_certs: false
+      loop: "{{ r_kc_users.results | selectattr('json', 'truthy') | list }}"
+      loop_control: { label: "{{ item.item }}" }
+
+    - name: keycloak | OIDC clients (Developer Hub, Gitea)
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients"
+        method: POST
+        headers: "{{ _kc_h }}"
+        body_format: json
+        body:
+          clientId: "{{ item.id }}"
+          name: "{{ item.name }}"
+          protocol: openid-connect
+          publicClient: false
+          standardFlowEnabled: true
+          directAccessGrantsEnabled: false
+          rootUrl: "{{ item.url }}"
+          baseUrl: "{{ item.url }}"
+          redirectUris: "{{ item.redirects }}"
+          webOrigins: ["{{ item.url }}"]
+          attributes: { "post.logout.redirect.uris": "+" }
+        status_code: [201, 409]
+        validate_certs: false
+      loop:
+        - { id: rhdh, name: Developer Hub, url: "https://{{ rhdh_host }}", redirects: ["https://{{ rhdh_host }}/api/auth/oidc/handler/frame", "https://{{ rhdh_host }}/*"] }
+        - { id: gitea, name: Gitea, url: "https://{{ gitea_host }}", redirects: ["https://{{ gitea_host }}/user/oauth2/keycloak/callback"] }
+      loop_control: { label: "{{ item.id }}" }
+
+    - name: keycloak | a groups mapper on each client (Developer Hub RBAC reads group claims)
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients?clientId={{ item }}"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      loop: [rhdh, gitea]
+      register: r_kc_clients
+
+    - name: keycloak | groups mapper
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients/{{ item.json[0].id }}/protocol-mappers/models"
+        method: POST
+        headers: "{{ _kc_h }}"
+        body_format: json
+        body:
+          name: groups
+          protocol: openid-connect
+          protocolMapper: oidc-group-membership-mapper
+          config: { "claim.name": groups, "full.path": "false", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" }
+        status_code: [201, 409]
+        validate_certs: false
+      loop: "{{ r_kc_clients.results }}"
+      loop_control: { label: "{{ item.item }}" }
+
+    - name: keycloak | client secrets
+      ansible.builtin.uri:
+        url: "{{ keycloak_url }}/admin/realms/{{ keycloak_realm }}/clients/{{ item.json[0].id }}/client-secret"
+        headers: "{{ _kc_h }}"
+        validate_certs: false
+      loop: "{{ r_kc_clients.results }}"
+      loop_control: { label: "{{ item.item }}" }
+      register: r_kc_secrets
+      no_log: true
+
+    - name: keycloak | store the Developer Hub OIDC client (same Secret name as the reference cluster)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: rhdh-workshop-oidc
+            namespace: "{{ rhdh_namespace }}"
+          type: Opaque
+          stringData:
+            OIDC_CLIENT_ID: rhdh
+            OIDC_CLIENT_SECRET: "{{ (r_kc_secrets.results | selectattr('item.item', 'equalto', 'rhdh') | first).json.value }}"
+            OIDC_METADATA_URL: "{{ keycloak_url }}/realms/{{ keycloak_realm }}/.well-known/openid-configuration"
+      no_log: true
+
+    - name: keycloak | store the Gitea OIDC client
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gitea-keycloak-oidc
+            namespace: "{{ gitea_namespace }}"
+          type: Opaque
+          stringData:
+            client_id: gitea
+            client_secret: "{{ (r_kc_secrets.results | selectattr('item.item', 'equalto', 'gitea') | first).json.value }}"
+            discovery_url: "{{ keycloak_url }}/realms/{{ keycloak_realm }}/.well-known/openid-configuration"
+      no_log: true
+
+    - name: keycloak | done
+      ansible.builtin.debug:
+        msg: "realm {{ keycloak_realm }}: group {{ workshop_attendees_group }} with {{ num_users }} users, clients rhdh + gitea"
