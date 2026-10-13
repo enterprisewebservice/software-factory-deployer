@@ -27,6 +27,17 @@ spec:
     # its own gateway) deploys into the attendee's namespace.
     - namespace: '*-agent-workspace'
       server: https://kubernetes.default.svc
+  # Attendees sign in to the GitOps console with their workshop identity; without a
+  # project role they see nothing. The workshop's OpenShift group gets read access to the
+  # applications of this project (the guide reads an Application's tree and history; it
+  # never asks an attendee to sync by hand). Subjects are groups, never user names.
+  roles:
+    - name: attendee
+      description: Workshop attendees read the agent applications of this project
+      policies:
+        - p, proj:agent-office:attendee, applications, get, agent-office/*, allow
+      groups:
+        - {{ workshop_openshift_group }}
   clusterResourceWhitelist:
     - group: '*'
       kind: '*'
