@@ -9,7 +9,7 @@
     showroom_content_git_repo_ref: "{{ showroom_content_ref }}"
     showroom_user_data:
       user: "{{ keycloak_user_prefix }}{{ _seat_n }}"
-      password: "{{ workshop_user_password }}"
+      password: "{{ _seat_passwords[keycloak_user_prefix ~ _seat_n] }}"
       gitea_url: "{{ 'https://' ~ gitea_host if (gitea_host | default('') | length > 0) else 'not-deployed-yet' }}"
       seat_mode: "{{ showroom_seat_mode }}"
       openshift_console_url: "{{ _console_url }}"

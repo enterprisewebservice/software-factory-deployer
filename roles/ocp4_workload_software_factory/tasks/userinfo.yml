@@ -5,7 +5,7 @@
   ansible.builtin.set_fact:
     _userinfo:
       demo_title: "OpenShift Software Factory - Agents as Staff"
-      access_instructions: "Open your seat's lab guide (showroom_url_userN below) and follow Module 1. Sign in to the console with the userN credentials from this page."
+      access_instructions: "Open your seat's lab guide (showroom_url_userN below) and follow Module 1. Each seat signs in everywhere (console, Developer Hub, GitOps, Gitea, chat) as userN with password_userN from this page."
       openshift_console_url: "{{ _console_url }}"
       openshift_api_url: "{{ _api_url }}"
       gitops_url: "{{ _gitops_url }}"
@@ -13,10 +13,17 @@
       ocp_version: "{{ _ocp_version }}"
       num_users: "{{ num_users | string }}"
       stages_run: "{{ _stages | join(',') }}"
-      workshop_password: "{{ workshop_user_password }}"
       gitea_url: "{{ 'https://' ~ gitea_host if (gitea_host | default('') | length > 0) else 'not-deployed' }}"
       devhub_url: "{{ _devhub_url | default('not-deployed') }}"
       mattermost_url: "{{ _mattermost_url | default('not-deployed') }}"
+
+- name: userinfo | add the per-seat passwords (one per attendee, the same one every surface takes)
+  ansible.builtin.set_fact:
+    _userinfo: "{{ _userinfo | combine({('password_' ~ item.key): item.value}) }}"
+  loop: "{{ _seat_passwords | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
 
 - name: userinfo | add the per-seat guide URLs
   ansible.builtin.set_fact:
@@ -52,6 +59,6 @@
           demo.redhat.com/application: software-factory
       data: "{{ _userinfo }}"
 
-- name: userinfo | published
+- name: userinfo | published (passwords withheld from the log)
   ansible.builtin.debug:
-    msg: "{{ _userinfo }}"
+    msg: "{{ _userinfo | dict2items | rejectattr('key', 'match', '^password_') | items2dict }}"

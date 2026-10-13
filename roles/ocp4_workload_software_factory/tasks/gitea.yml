@@ -68,9 +68,28 @@
     body:
       username: "{{ keycloak_user_prefix }}{{ item }}"
       email: "{{ keycloak_user_prefix }}{{ item }}@{{ gitea_host }}"
-      password: "{{ keycloak_user_password }}"
+      password: "{{ _seat_passwords[keycloak_user_prefix ~ item] }}"
       must_change_password: false
     status_code: [201, 422] # 422 = already exists (idempotent re-run)
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  no_log: true
+
+# Existing users converge on the seat password too (a re-run after the password source
+# changed, or after a base rotated it), so the Gitea password never drifts from Keycloak's.
+- name: gitea | per-attendee passwords converge
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/users/{{ keycloak_user_prefix }}{{ item }}"
+    method: PATCH
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      login_name: "{{ keycloak_user_prefix }}{{ item }}"
+      source_id: 0
+      password: "{{ _seat_passwords[keycloak_user_prefix ~ item] }}"
+      must_change_password: false
+    status_code: [200]
   loop: "{{ range(1, num_users | int + 1) | list }}"
   no_log: true
 
