@@ -16,6 +16,7 @@
       workshop_password: "{{ workshop_user_password }}"
       gitea_url: "{{ 'https://' ~ gitea_host if (gitea_host | default('') | length > 0) else 'not-deployed' }}"
       devhub_url: "{{ _devhub_url | default('not-deployed') }}"
+      mattermost_url: "{{ _mattermost_url | default('not-deployed') }}"
 
 - name: userinfo | add the per-seat guide URLs
   ansible.builtin.set_fact:

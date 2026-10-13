@@ -1,6 +1,38 @@
 ---
-# TODO(iteration-1, first test cluster): implement verify stage.
-# See docs/COMPONENTS.md for scope. Grounded in agent-office/cluster manifests.
-- name: "verify stage placeholder"
+# Verify stage: the front doors an attendee will use must answer before the order is
+# reported done. Each check is a plain HTTP request from inside the cluster to the public
+# route, so a broken route, certificate or pod shows up here, in the Job log, not in a seat.
+
+- name: verify | front doors
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    validate_certs: false
+    status_code: "{{ item.codes }}"
+    follow_redirects: none
+  loop:
+    - { name: Gitea, url: "https://{{ gitea_host }}/user/login", codes: [200] }
+    - { name: Developer Hub, url: "https://{{ rhdh_host }}/.backstage/health/v1/readiness", codes: [200] }
+    - { name: Mattermost, url: "https://{{ mattermost_host }}/", codes: [200] }
+    - { name: "Showroom {{ keycloak_user_prefix }}1", url: "{{ (_showroom_urls | default({})).get(keycloak_user_prefix ~ '1', 'https://' ~ cluster_domain) }}/modules/index.html", codes: [200] }
+  loop_control: { label: "{{ item.name }}" }
+  register: r_verify
+  retries: 6
+  delay: 10
+  until: r_verify.status in item.codes
+  when: "(item.name != 'Mattermost' or 'mattermost' in _stages) and (item.name != 'Developer Hub' or 'rhdh' in _stages) and (item.name != 'Gitea' or 'gitea' in _stages)"
+
+- name: verify | MCP registration
+  kubernetes.core.k8s_info:
+    api_version: mcp.kuadrant.io/v1alpha1
+    kind: MCPServerRegistration
+    name: gitea
+    namespace: "{{ ocp4_workload_software_factory_namespace }}"
+  register: r_verify_mcp
+  failed_when: >-
+    r_verify_mcp.resources | length == 0 or
+    (r_verify_mcp.resources[0].status.conditions | default([]) | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length) == 0
+  when: "'mcp_gateway' in _stages"
+
+- name: verify | summary
   ansible.builtin.debug:
-    msg: "TODO: verify"
+    msg: "front doors answered: {{ r_verify.results | selectattr('skipped', 'undefined') | map(attribute='item.name') | list }}; MCP gitea tools: {{ (r_verify_mcp.resources | default([{}]))[0].status.toolCount | default('n/a') }}"
