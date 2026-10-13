@@ -25,7 +25,7 @@ One Argo CD behaviour to know: when the hook Job fails, the retried Job is built
 
 | Stage | State on an RHDP order | Notes |
 |---|---|---|
-| operators | works | skips what the base installed; subscribes the agent-office operator from `quay.io/dpeterso/agent-office-operator-catalog:v1.7.80`, with the order's model endpoint wired in as the hiring form's recommender |
+| operators | works | skips what the base installed; subscribes the agent-office operator from `quay.io/dpeterso/agent-office-operator-catalog:v1.7.81`, with the order's model endpoint wired in as the hiring form's recommender |
 | gitea | works | RHPDS gitea-operator, admin + user1..N, per-user orgs, tokens, Secrets, Argo AppProject + ApplicationSet |
 | keycloak_users | works | base realm `sso`: attendees group, `rhdh` and `gitea` OIDC clients, provider roles |
 | rhdh | works | chart 1.9.2 at `devhub.<domain>`, OIDC sign-in, Gitea + Argo CD, RBAC, the workshop's own plugins; the hire template is mirrored with this cluster's Gitea and the published OpenClaw image |
