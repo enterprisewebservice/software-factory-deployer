@@ -36,7 +36,8 @@ One Argo CD behaviour to know: when the hook Job fails, the retried Job is built
 | mcp_gateway | works | Kuadrant instance, MCP gateway on the OpenShift AI gateway class, policies, Gitea MCP server (54 tools) |
 | showroom, userinfo | work | one guide per seat; URLs and the workshop password on the order page |
 | verify | works | Gitea, Developer Hub, Mattermost and the first guide answer; the MCP registration is Ready |
-| Quay + Pipelines-as-Code (Module 6), MaaS lane (Module 7), guide content for the RHDP flavour | not yet | |
+| model_desk | works | the facilitator's Claude lane: Secret `model-desk/model-desk-gcp-adc` (Vertex application-default credential, the guide's first step) → LiteLLM proxy in front of Claude on Vertex AI, admin key, agent key, ModelConnection `claude-work` (Opus 5, Sonnet 5, Opus 4.8, Opus 4.6) as the default brain; without the Secret the stage reports it and the order stays on LiteMaaS |
+| Quay + Pipelines-as-Code (Module 6), OpenShift AI MaaS under the connections (Module 7 swap), guide content for the RHDP flavour | not yet | |
 
 Images: everything the workshop needs is public under `quay.io/dpeterso` (mirror map in `docs/mirror-to-quay-io.txt`; the operator, bundle and catalog are pushed there by the operator repository's own pipelines on the reference cluster, robot account `dpeterso+salamander`).
 
@@ -52,7 +53,7 @@ Modules 1, 2 and 5 pass as `user1`; Module 4's install path passes through the r
 
 | Where | What an attendee sees | Cause and status |
 |---|---|---|
-| Module 3, exercise 1 (and every tool-driven step after it) | the agent answers with the literal text of a tool call, or invents results | the order's LiteMaaS key is scoped to `llama-scout-17b`, which does not reliably emit tool calls through the proxy (0 of 3 on the module's question, even called directly). The runtime, gateway and tools are fine: salamander's agents on stronger models use the same path. Needs a tool-capable model from LiteMaaS at order time. |
+| Module 3, exercise 1 (and every tool-driven step after it) on the order's own model | the agent answers with the literal text of a tool call, or invents results | the order's LiteMaaS key is scoped to `llama-scout-17b`, which does not reliably emit tool calls through the proxy. Resolved by the `model_desk` stage: on Claude Sonnet 5 the same exercises pass (Module 3's identity and repositories from real Gitea calls, Module 4's four-section triage, Module 5's headless `USER=user1`). |
 | Module 4, exercise 2 | registry reads fail | the guide hardcodes the reference cluster's Quay, a `quay-pull-secret` the seat does not have, and private repositories. The install in exercise 3 works with `packageRef.ref: agent-office/<skill>:<version>` (the mindifact.ai registry), which delivers the same content hash. |
 | Module 4, exercise 5 and Module 5's governed prompt | no `metrics_*` tools | the `ops-metrics` MCP server is a reference-cluster demo and is not deployed here. |
 | Module 5, exercise 1 probe | `localhost:18789` refuses | the runtime binds the HTTP face to the pod address; the Service name works. |
