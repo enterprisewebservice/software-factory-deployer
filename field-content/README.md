@@ -46,6 +46,21 @@ Images: everything the workshop needs is public under `quay.io/dpeterso` (mirror
 
 `N` seats come from RHDP's `multi_user.num_users` when the order is multi-user, else 5. Each seat has one password everywhere: the base creates `userN` in its Keycloak with a password of its own and never passes it to the chart, so the deployer reads it back from the base's `KeycloakRealmImport` and gives Gitea (and through it Mattermost) and the seat's guide the same value; without a realm import every seat gets one generated password. The lab guides are built from https://github.com/enterprisewebservice/showroom-openshift-software-factory with the console, API, Gitea, Developer Hub and Mattermost URLs and the seat's password filled in. The ConfigMap `software-factory-userinfo` (label `demo.redhat.com/userinfo`) carries the URLs and `password_userN`, which RHDP shows on the order page.
 
+## Attendee run-through of 13 October 2026 (order 9cwxl)
+
+Modules 1, 2 and 5 pass as `user1`; Module 4's install path passes through the registry reference. What does not pass, and why:
+
+| Where | What an attendee sees | Cause and status |
+|---|---|---|
+| Module 3, exercise 1 (and every tool-driven step after it) | the agent answers with the literal text of a tool call, or invents results | the order's LiteMaaS key is scoped to `llama-scout-17b`, which does not reliably emit tool calls through the proxy (0 of 3 on the module's question, even called directly). The runtime, gateway and tools are fine: salamander's agents on stronger models use the same path. Needs a tool-capable model from LiteMaaS at order time. |
+| Module 4, exercise 2 | registry reads fail | the guide hardcodes the reference cluster's Quay, a `quay-pull-secret` the seat does not have, and private repositories. The install in exercise 3 works with `packageRef.ref: agent-office/<skill>:<version>` (the mindifact.ai registry), which delivers the same content hash. |
+| Module 4, exercise 5 and Module 5's governed prompt | no `metrics_*` tools | the `ops-metrics` MCP server is a reference-cluster demo and is not deployed here. |
+| Module 5, exercise 1 probe | `localhost:18789` refuses | the runtime binds the HTTP face to the pod address; the Service name works. |
+| Modules 6 and 7 | not runnable | on-cluster Quay with Pipelines-as-Code, and a second brain, are not built for this flavour yet. |
+| Guide text | `workshop` identity provider, `admin-userN`, Vault and ESO refreshers | the ordered cluster signs in through `rhbk`, has no admin persona, and delivers seat tokens as plain Secrets (the guide's self-service text matches this flavour better than its fixed-seat text). |
+
+Fixes that came out of the run are in this repository: per-seat passwords adopted from the base, Gitea tokens minted once, the Authorino TLS override made conditional, and Gitea's OAuth2 provider enabled for the chat sign-in.
+
 ## Reading the result
 
 ```bash
