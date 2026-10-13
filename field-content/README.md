@@ -31,11 +31,12 @@ One Argo CD behaviour to know: when the hook Job fails, the retried Job is built
 | rhdh | works | chart 1.9.2 at `devhub.<domain>`, OIDC sign-in, Gitea + Argo CD, RBAC, template mirror, the workshop's own plugins |
 | agent_platform | works (platform half) | platform namespace, SCC + ClusterRole, attendee group; operator and console plugin wait for the catalog |
 | rhoai_maas | deferred | LiteMaaS key captured; ModelConnection created once the operator's CRD is served |
-| mattermost | first run in progress | Mattermost + PostgreSQL, Gitea sign-in, admin token, agents team, bridge |
+| mattermost | works | Mattermost + PostgreSQL at `mattermost-mattermost.<domain>`, Gitea sign-in, admin token, agents team, bridge |
 | seats | works | `userN-agent-workspace`: RBAC, quota, limits, isolation, Gitea token; SCC binding once the platform exists |
 | mcp_gateway | works | Kuadrant instance, MCP gateway on the OpenShift AI gateway class, policies, Gitea MCP server (54 tools) |
 | showroom, userinfo | work | one guide per seat; URLs and the workshop password on the order page |
-| verify, Quay + Pipelines-as-Code (Module 6), MaaS lane (Module 7) | not yet | |
+| verify | works | Gitea, Developer Hub, Mattermost and the first guide answer; the MCP registration is Ready |
+| Quay + Pipelines-as-Code (Module 6), MaaS lane (Module 7), guide content for the RHDP flavour | not yet | |
 
 Images: everything the workshop needs is mirrored to `quay.io/dpeterso` (map in `docs/mirror-to-quay-io.txt`); the repositories are private until flipped public in the Quay UI.
 
