@@ -157,12 +157,13 @@
   loop_control: { label: "{{ item.name }} ({{ item.role }})" }
   no_log: true
 
+# Quay answers 400 "Could not find robot with specified username" for a missing robot.
 - name: quay | robot accounts, existing
   ansible.builtin.uri:
     url: "{{ _quay_api }}/organization/{{ quay_org }}/robots/{{ item }}"
     headers: { Authorization: "Bearer {{ _quay_token }}" }
     validate_certs: false
-    status_code: [200, 404]
+    status_code: [200, 400]
   loop: "{{ ['mirror', 'pull'] + _quay_seats }}"
   register: r_quay_robots_get
   no_log: true
@@ -176,7 +177,7 @@
     body: { description: "software-factory-deployer" }
     validate_certs: false
     status_code: [201]
-  loop: "{{ r_quay_robots_get.results | selectattr('status', 'equalto', 404) | list }}"
+  loop: "{{ r_quay_robots_get.results | selectattr('status', 'equalto', 400) | list }}"
   loop_control: { label: "{{ item.item }}" }
   register: r_quay_robots_put
   no_log: true
@@ -353,19 +354,23 @@
             cosign.pub: "{{ (r_cosign.stdout | from_json)['cosign.pub'] }}"
       no_log: true
 
-    - name: quay | the Chains controller loads the key on restart
-      kubernetes.core.k8s:
-        state: patched
-        api_version: apps/v1
-        kind: Deployment
-        name: tekton-chains-controller
+    # The Pipelines operator owns the controller Deployment and reverts template edits, so the
+    # reload is the documented one: replace the controller pod.
+    - name: quay | Chains controller pods
+      kubernetes.core.k8s_info:
+        kind: Pod
         namespace: "{{ pipelines_namespace }}"
-        definition:
-          spec:
-            template:
-              metadata:
-                annotations:
-                  software-factory.redhat.com/restarted-at: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+        label_selectors: ["app=tekton-chains-controller"]
+      register: r_chains_pods
+
+    - name: quay | the Chains controller reloads the key (pod replaced by its Deployment)
+      kubernetes.core.k8s:
+        state: absent
+        kind: Pod
+        name: "{{ item.metadata.name }}"
+        namespace: "{{ pipelines_namespace }}"
+      loop: "{{ r_chains_pods.resources }}"
+      loop_control: { label: "{{ item.metadata.name }}" }
 
 - name: quay | done
   ansible.builtin.debug:
