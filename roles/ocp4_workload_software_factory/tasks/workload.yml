@@ -17,14 +17,14 @@
   when: "'gitea' in _stages"
 - ansible.builtin.include_tasks: gitops.yml
   when: "'gitops' in _stages"
-- ansible.builtin.include_tasks: rhoai_maas.yml
-  when: "'rhoai_maas' in _stages"
 - ansible.builtin.include_tasks: keycloak_users.yml
   when: "'keycloak_users' in _stages"
 - ansible.builtin.include_tasks: rhdh.yml
   when: "'rhdh' in _stages"
 - ansible.builtin.include_tasks: agent_platform.yml
   when: "'agent_platform' in _stages"
+- ansible.builtin.include_tasks: rhoai_maas.yml
+  when: "'rhoai_maas' in _stages"
 - ansible.builtin.include_tasks: seats.yml
   when: "'seats' in _stages"
 - ansible.builtin.include_tasks: showroom.yml

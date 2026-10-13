@@ -24,7 +24,7 @@
           {'name': 'rhods-operator', 'ns': 'redhat-ods-operator', 'source': 'redhat-operators', 'channel': 'stable'},
           {'name': 'external-secrets-operator', 'ns': 'openshift-operators', 'source': 'community-operators', 'channel': eso_channel},
           {'name': 'mcp-gateway', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': mcp_gateway_channel}
-        ] + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel}]
+        ] + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel, 'env': [{'name': 'MANAGED_NAMESPACES', 'value': ocp4_workload_software_factory_namespace}, {'name': 'AGENT_REGISTRY_URLS', 'value': agent_registry_urls}]}]
              if agent_office_catalog_image | length > 0 else [])
       }}
 

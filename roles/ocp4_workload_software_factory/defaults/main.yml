@@ -67,7 +67,7 @@ keycloak_user_password: ""            # generated per-order (lookup('password', 
 
 # Stage selection. A list, or a comma-separated string when passed as an extra-var (the Field
 # Content Job does that). The first RHDP order runs: operators,showroom,userinfo
-software_factory_stages: [operators, gitea, gitops, keycloak_users, rhoai_maas, rhdh, agent_platform, seats, showroom, verify, userinfo]
+software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, seats, showroom, verify, userinfo]
 cluster_domain: ""                    # derived from ingresses.config.openshift.io/cluster when empty
 
 # Showroom: one lab guide per seat (user1..N), the RHDP multi-user model
@@ -101,3 +101,8 @@ rhdh_super_user: admin                # the base's admin user, present in the Ke
 rhdh_custom_plugins: false            # the workshop's own plugins at quay.io/dpeterso; true once those repos are public
 rhdh_operator_catalog: false          # register the operator's Backstage catalog once the operator is installed
 keycloak_realm: "{{ keycloak_realm_fallback }}"
+
+# Agent platform
+agent_office_console_plugin_image: quay.io/dpeterso/agent-office-plugin:v0.0.6
+agent_registry_urls: https://mindifact.ai/v1/index.json
+workshop_openshift_group: redhat-workshop-users

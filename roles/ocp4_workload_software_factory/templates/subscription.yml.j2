@@ -9,3 +9,11 @@ spec:
   source: "{{ item.source }}"
   sourceNamespace: openshift-marketplace
   installPlanApproval: Automatic
+{% if item.env is defined and item.env %}
+  config:
+    env:
+{% for e in item.env %}
+      - name: {{ e.name }}
+        value: "{{ e.value }}"
+{% endfor %}
+{% endif %}
