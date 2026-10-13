@@ -14,6 +14,13 @@ spec:
     env:
 {% for e in item.env %}
       - name: {{ e.name }}
+{% if e.secretKeyRef is defined %}
+        valueFrom:
+          secretKeyRef:
+            name: {{ e.secretKeyRef.name }}
+            key: {{ e.secretKeyRef.key }}
+{% else %}
         value: "{{ e.value }}"
+{% endif %}
 {% endfor %}
 {% endif %}

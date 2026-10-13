@@ -13,6 +13,23 @@
     kind: Subscription
   register: r_subs_all
 
+# The operator's environment, applied the OLM way (Subscription spec.config.env). The
+# recommender entries make the hiring form's "draft my agent" step model-driven through
+# the endpoint RHDP issued with the order; without them the operator's keyword fallback
+# answers. The token rides a Secret reference, never a value in the Subscription.
+- name: operators | agent-office operator environment
+  ansible.builtin.set_fact:
+    _recommender_on: "{{ maas_external_provider_url | length > 0 and maas_external_provider_secret | length > 0 }}"
+    _agent_office_env: >-
+      {{
+        [{'name': 'MANAGED_NAMESPACES', 'value': ocp4_workload_software_factory_namespace},
+         {'name': 'AGENT_REGISTRY_URLS', 'value': agent_registry_urls}]
+        + ([{'name': 'AGENT_RECOMMENDER_URL', 'value': maas_external_provider_url ~ '/chat/completions'},
+            {'name': 'AGENT_RECOMMENDER_MODEL', 'value': maas_external_provider_model},
+            {'name': 'AGENT_RECOMMENDER_TOKEN', 'secretKeyRef': {'name': 'rhdp-litemaas-api-key', 'key': 'api-key'}}]
+           if (maas_external_provider_url | length > 0 and maas_external_provider_secret | length > 0) else [])
+      }}
+
 - name: operators | build the subscription list
   ansible.builtin.set_fact:
     _installed_packages: "{{ r_subs_all.resources | map(attribute='spec.name') | list | unique }}"
@@ -24,7 +41,7 @@
           {'name': 'rhods-operator', 'ns': 'redhat-ods-operator', 'source': 'redhat-operators', 'channel': 'stable'},
           {'name': 'external-secrets-operator', 'ns': 'openshift-operators', 'source': 'community-operators', 'channel': eso_channel},
           {'name': 'mcp-gateway', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': mcp_gateway_channel}
-        ] + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel, 'env': [{'name': 'MANAGED_NAMESPACES', 'value': ocp4_workload_software_factory_namespace}, {'name': 'AGENT_REGISTRY_URLS', 'value': agent_registry_urls}]}]
+        ] + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel, 'env': _agent_office_env}]
              if agent_office_catalog_image | length > 0 else [])
       }}
 
@@ -69,12 +86,43 @@
   loop_control: { label: "{{ item.kind }}" }
   when: agent_office_catalog_image | length > 0 and 'agent-office-operator' not in _installed_packages
 
+# The operator's Deployment reads the recommender token from this Secret; it must exist
+# before the Subscription, or the CSV never turns Succeeded (the pod cannot start).
+- name: operators | recommender token for the operator (the key RHDP issued)
+  when: agent_office_catalog_image | length > 0 and _recommender_on | bool
+  block:
+    - name: operators | read the key RHDP issued
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: "{{ maas_external_provider_secret }}"
+        namespace: "{{ userinfo_namespace }}"
+      register: r_op_maas_secret
+      no_log: true
+
+    - name: operators | key Secret beside the operator
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+      loop:
+        - { apiVersion: v1, kind: Namespace, metadata: { name: agent-office-operator } }
+        - apiVersion: v1
+          kind: Secret
+          metadata: { name: rhdp-litemaas-api-key, namespace: agent-office-operator }
+          type: Opaque
+          stringData:
+            api-key: "{{ r_op_maas_secret.resources[0].data.apiKey | b64decode }}"
+      loop_control: { label: "{{ item.kind }}" }
+      no_log: true
+
+# Packages that already have a Subscription belong to whoever created it (the base, an
+# earlier run) and are skipped. The agent-office operator's is ours: it is re-applied every
+# run so environment changes (the recommender) reach the Deployment through OLM.
 - name: operators | subscriptions (skipping packages that already have one)
   kubernetes.core.k8s:
     definition: "{{ lookup('template', 'subscription.yml.j2') | from_yaml }}"
   loop: "{{ _subscriptions }}"
   loop_control: { label: "{{ item.name }}" }
-  when: item.name not in _installed_packages
+  when: item.name not in _installed_packages or item.name == 'agent-office-operator'
 
 # Wait only for what this run subscribed. A package the base (or an earlier run) installed is
 # its owner's responsibility; blocking on it would turn their failure into ours.
