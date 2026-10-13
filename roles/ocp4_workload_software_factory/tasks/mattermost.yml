@@ -237,6 +237,12 @@
   register: r_mm_token
   no_log: true
 
+- name: chat | namespaces that read the token (the operator's may not exist before its catalog does)
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: "{{ item }}" } }
+  loop: [agent-office-operator, "{{ ocp4_workload_software_factory_namespace }}"]
+
 - name: chat | the token where the operator and the bridge read it
   kubernetes.core.k8s:
     state: present
