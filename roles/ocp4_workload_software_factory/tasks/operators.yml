@@ -33,14 +33,27 @@
     definition: "{{ lookup('template', 'catalogsource.yml.j2') | from_yaml }}"
   when: agent_office_catalog_image | length > 0
 
-- name: operators | OpenShift AI operator namespace and OperatorGroup
+# Only when this run subscribes OpenShift AI itself. A namespace must hold exactly one
+# OperatorGroup: adding a second one next to the base's broke its CSV on the first RHDP run.
+- name: operators | OpenShift AI operator namespace
   kubernetes.core.k8s:
     state: present
-    definition: "{{ item }}"
-  loop:
-    - { apiVersion: v1, kind: Namespace, metadata: { name: redhat-ods-operator } }
-    - { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: redhat-ods-operator, namespace: redhat-ods-operator }, spec: {} }
-  loop_control: { label: "{{ item.kind }}" }
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: redhat-ods-operator } }
+  when: "'rhods-operator' not in _installed_packages"
+
+- name: operators | existing OperatorGroups in redhat-ods-operator
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1
+    kind: OperatorGroup
+    namespace: redhat-ods-operator
+  register: r_rhods_og
+  when: "'rhods-operator' not in _installed_packages"
+
+- name: operators | OpenShift AI OperatorGroup (only if the namespace has none)
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: redhat-ods-operator, namespace: redhat-ods-operator }, spec: {} }
+  when: "'rhods-operator' not in _installed_packages and (r_rhods_og.resources | default([]) | length == 0)"
 
 - name: operators | already installed by the base (skipped)
   ansible.builtin.debug:
