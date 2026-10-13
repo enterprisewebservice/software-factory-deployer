@@ -159,6 +159,12 @@ spec:
             # OpenID Connect, so the GitLab integration points at Gitea's
             # OAuth2 provider — and Gitea itself signs in via Keycloak.
             # One account everywhere; the button says so.
+            # Mattermost refuses integration calls to private addresses unless listed. An
+            # ordered cluster's apps domain (Gitea's route, the OAuth token endpoint) resolves
+            # to a private ingress address, which looped every chat sign-in back to the card
+            # ("address forbidden ... AllowedUntrustedInternalConnections", 13 October 2026).
+            - name: MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS
+              value: "{{ gitea_host }} {{ cluster_domain }} 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
             - name: MM_GITLABSETTINGS_ENABLE
               value: "true"
             - name: MM_GITLABSETTINGS_ID
