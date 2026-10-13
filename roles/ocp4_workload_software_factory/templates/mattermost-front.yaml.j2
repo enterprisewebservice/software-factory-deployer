@@ -1,0 +1,167 @@
+# SSO-only front for Mattermost (Gitea OAuth): vendored from agent-office/cluster/mattermost/front.yaml
+# =============================================================================
+# mattermost-front — an SSO-only sign-in page in front of Mattermost.
+#
+# Mattermost Free (Team Edition) 11.x runs the GitLab-style OAuth flow that
+# signs attendees in through Gitea + Keycloak, but only a licensed server
+# renders the sign-in BUTTON, so its /login page is a dead end: email and
+# password fields nobody has. This nginx sits on the Route in front of the
+# server. It answers /login itself (a one-click "Sign in with your workshop
+# account" page that starts the OAuth flow, honouring redirect_to) unless
+# the browser already carries a Mattermost session, and passes everything
+# else — API, websocket, static, OAuth callback — straight through.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mattermost-front
+  namespace: mattermost
+data:
+  nginx.conf: |
+    error_log /dev/stderr;
+    pid /tmp/nginx.pid;
+    events { worker_connections 2048; }
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      access_log off;
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path /tmp/proxy;
+      client_max_body_size 200m;
+      map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+      server {
+        listen 8080 default_server;
+        absolute_redirect off;
+
+        # Machine paths always pass through: the API and websocket, static
+        # assets, plugins, file uploads, the OAuth start/callback routes.
+        location ^~ /api/     { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location ^~ /static/  { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location ^~ /plugins/ { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location ^~ /files/   { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location ^~ /hooks/   { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location ^~ /oauth/   { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        # The OAuth callbacks only — NOT "/login/": a prefix location
+        # ending in a slash makes nginx 301 "/login" to "/login/", which
+        # would hand the dead login page straight back.
+        location ^~ /signup/gitlab/ { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location ^~ /login/gitlab/  { proxy_pass http://mattermost:8065; include /etc/nginx-custom/proxy.conf; }
+        location = /sso-login.html { internal; root /opt/app-root/src/site; }
+
+        # Every other path is the web app: the SPA boots, finds no session
+        # and switches to ITS login view client-side, which the server
+        # never sees — so a browser without a Mattermost session gets the
+        # sign-in page here, for any app URL, with that URL as the
+        # destination after sign-in. A browser with a session (MMAUTHTOKEN)
+        # goes straight through.
+        location / {
+          if ($cookie_MMAUTHTOKEN = "") { rewrite ^ /sso-login.html last; }
+          proxy_pass http://mattermost:8065;
+          include /etc/nginx-custom/proxy.conf;
+        }
+      }
+    }
+  proxy.conf: |
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Frame-Options SAMEORIGIN;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  sso-login.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in — workshop chat</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;900&family=Red+Hat+Text:wght@400;500;700&display=swap">
+    <style>
+      :root { --rh-red:#ee0000; --ink:#151515; --muted:#4d4d4d; --line:#e0e0e0; --bg:#f2f2f2; }
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:"Red Hat Text",system-ui,sans-serif; color:var(--ink); background:var(--bg); min-height:100vh; display:flex; flex-direction:column; }
+      .nav { background:#000; color:#fff; padding:0.7rem 1.5rem; display:flex; align-items:baseline; gap:0.6rem; font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.15rem; }
+      .nav .mark { width:0.85rem; height:1.35rem; background:var(--rh-red); border-radius:2px; transform:skewX(-8deg); display:inline-block; align-self:center; }
+      .nav .thin { font-weight:400; color:#c7c7c7; }
+      main { flex:1; display:flex; align-items:center; justify-content:center; padding:2rem 1.5rem; }
+      .card { background:#fff; border:1px solid var(--line); border-radius:10px; max-width:460px; width:100%; padding:2rem; box-shadow:0 12px 30px rgba(0,0,0,.08); }
+      .card .top { height:6px; background:var(--rh-red); border-radius:4px; margin:-2rem -2rem 1.4rem; }
+      h1 { font-family:"Red Hat Display",sans-serif; font-weight:900; font-size:1.5rem; }
+      p { color:var(--muted); line-height:1.55; margin-top:0.7rem; font-size:0.95rem; }
+      .btn { display:block; text-align:center; margin-top:1.4rem; border:0; border-radius:4px; background:var(--rh-red); color:#fff; padding:0.75rem 1.15rem; font:600 1rem "Red Hat Text",sans-serif; text-decoration:none; }
+      .btn:hover { background:#c00; }
+      .small { font-size:0.83rem; margin-top:1.2rem; }
+      a.plain { color:var(--ink); }
+    </style>
+    </head>
+    <body>
+    <nav class="nav"><span class="mark"></span> Red&nbsp;Hat <span class="thin">Software Factory · chat</span></nav>
+    <main>
+      <div class="card">
+        <div class="top"></div>
+        <h1>Sign in to the workshop chat</h1>
+        <p>Chat uses the same account as the rest of the workshop. One click signs you in through your workshop login; nothing to type here.</p>
+        <a class="btn" id="go" href="/oauth/gitlab/login?redirect_to=%2F">Sign in with your workshop account</a>
+        <p class="small">Signed in as someone else last time? Chat follows your Gitea session: <a class="plain" href="https://{{ gitea_host }}/user/logout">sign out of Gitea</a>, then come back here and sign in.</p>
+      </div>
+    </main>
+    <script>
+      // Honour Mattermost's own deep link (/login?redirect_to=/team/channel).
+      // The browser's URL is the destination: the server rewrote it to this
+      // page internally. A /login?redirect_to=X deep link unwraps to X.
+      let rt = new URLSearchParams(location.search).get('redirect_to');
+      if (!rt && location.pathname !== '/login' && location.pathname !== '/login/') rt = location.pathname + location.search;
+      if (rt === '/login' || rt === '/login/') rt = null;
+      if (rt && rt.startsWith('/') && !rt.startsWith('//')) {
+        document.getElementById('go').href = '/oauth/gitlab/login?redirect_to=' + encodeURIComponent(rt);
+      }
+    </script>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mattermost-front
+  namespace: mattermost
+  labels: { app: mattermost-front }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mattermost-front } }
+  template:
+    metadata:
+      labels: { app: mattermost-front }
+      annotations:
+        # Roll the pod when the page or config changes (kubectl rollout restart after apply).
+        mattermost-front/config: "v4"
+    spec:
+      containers:
+        - name: nginx
+          image: registry.access.redhat.com/ubi9/nginx-124:latest
+          command: ["nginx", "-c", "/etc/nginx-custom/nginx.conf", "-g", "daemon off;"]
+          ports: [{ containerPort: 8080 }]
+          volumeMounts:
+            - { name: conf, mountPath: /etc/nginx-custom, readOnly: true }
+            - { name: site, mountPath: /opt/app-root/src/site, readOnly: true }
+          readinessProbe: { httpGet: { path: /api/v4/system/ping, port: 8080 }, initialDelaySeconds: 3, periodSeconds: 10 }
+          resources: { requests: { cpu: 10m, memory: 32Mi }, limits: { cpu: 500m, memory: 128Mi } }
+      volumes:
+        - name: conf
+          configMap: { name: mattermost-front, items: [{ key: nginx.conf, path: nginx.conf }, { key: proxy.conf, path: proxy.conf }] }
+        - name: site
+          configMap: { name: mattermost-front, items: [{ key: sso-login.html, path: sso-login.html }] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mattermost-front
+  namespace: mattermost
+  labels: { app: mattermost-front }
+spec:
+  selector: { app: mattermost-front }
+  ports: [{ name: http, port: 8080, targetPort: 8080 }]

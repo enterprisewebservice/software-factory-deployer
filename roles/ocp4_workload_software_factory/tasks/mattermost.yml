@@ -1,0 +1,285 @@
+---
+# Chat stage: Mattermost (Team Edition) with sign-in through Gitea's OAuth, the SSO-only
+# front, the first admin and its token, the agents team, and the bridge that relays
+# channel messages to the seats' agents. Vendored from agent-office/cluster/mattermost; the
+# one-time bootstrap the reference cluster did by hand is done here, once per order.
+
+- name: chat | facts
+  ansible.builtin.set_fact:
+    _mm_api: "http://mattermost.mattermost.svc.cluster.local:8065/api/v4"
+    _gitea_api: "https://{{ gitea_host }}/api/v1"
+
+- name: chat | namespace
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: mattermost } }
+
+# --- database credentials, generated once
+- name: chat | existing database Secret
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: mattermost-db
+    namespace: mattermost
+  register: r_mm_db
+  no_log: true
+
+- name: chat | database Secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: mattermost-db, namespace: mattermost }
+      type: Opaque
+      stringData:
+        POSTGRESQL_USER: mmuser
+        POSTGRESQL_PASSWORD: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=24') }}"
+        POSTGRESQL_DATABASE: mattermost
+  when: r_mm_db.resources | length == 0
+  no_log: true
+
+# --- Gitea OAuth application (Mattermost signs attendees in through Gitea's OAuth, GitLab style)
+- name: chat | existing OAuth Secret
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: mattermost-gitea-oauth
+    namespace: mattermost
+  register: r_mm_oauth
+  no_log: true
+
+- name: chat | Gitea OAuth application
+  when: r_mm_oauth.resources | length == 0
+  block:
+    - name: chat | Gitea admin credentials
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: gitea-admin-credentials
+        namespace: "{{ gitea_namespace }}"
+      register: r_mm_gadmin
+      no_log: true
+
+    - name: chat | existing applications of the admin
+      ansible.builtin.uri:
+        url: "{{ _gitea_api }}/user/applications/oauth2"
+        url_username: "{{ gitea_admin_user }}"
+        url_password: "{{ r_mm_gadmin.resources[0].data.password | b64decode }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: r_mm_apps
+      no_log: true
+
+    - name: chat | drop a stale application of the same name
+      ansible.builtin.uri:
+        url: "{{ _gitea_api }}/user/applications/oauth2/{{ item.id }}"
+        method: DELETE
+        url_username: "{{ gitea_admin_user }}"
+        url_password: "{{ r_mm_gadmin.resources[0].data.password | b64decode }}"
+        force_basic_auth: true
+        status_code: [204]
+        validate_certs: false
+      loop: "{{ r_mm_apps.json | selectattr('name', 'equalto', 'mattermost') | list }}"
+      loop_control: { label: "{{ item.id }}" }
+      no_log: true
+
+    - name: chat | create the application
+      ansible.builtin.uri:
+        url: "{{ _gitea_api }}/user/applications/oauth2"
+        method: POST
+        url_username: "{{ gitea_admin_user }}"
+        url_password: "{{ r_mm_gadmin.resources[0].data.password | b64decode }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: mattermost
+          confidential_client: true
+          redirect_uris: ["https://{{ mattermost_host }}/signup/gitlab/complete", "https://{{ mattermost_host }}/login/gitlab/complete"]
+        status_code: [201]
+        validate_certs: false
+      register: r_mm_app
+      no_log: true
+
+    - name: chat | OAuth Secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata: { name: mattermost-gitea-oauth, namespace: mattermost }
+          type: Opaque
+          stringData:
+            id: "{{ r_mm_app.json.client_id }}"
+            secret: "{{ r_mm_app.json.client_secret }}"
+      no_log: true
+
+# --- Mattermost, PostgreSQL, the SSO-only front
+- name: chat | Mattermost and PostgreSQL
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'mattermost.yaml.j2') | from_yaml_all | list }}"
+
+- name: chat | wait for Mattermost
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: mattermost
+    namespace: mattermost
+  register: r_mm_dep
+  until: r_mm_dep.resources | length > 0 and (r_mm_dep.resources[0].status.availableReplicas | default(0)) | int >= 1
+  retries: 60
+  delay: 10
+
+- name: chat | SSO-only front
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'mattermost-front.yaml.j2') | from_yaml_all | list }}"
+
+# --- first admin and its token (the first user created becomes system admin)
+- name: chat | existing admin token
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: mattermost-admin-token
+    namespace: mattermost
+  register: r_mm_token
+  no_log: true
+
+- name: chat | bootstrap the admin and its token
+  when: r_mm_token.resources | length == 0
+  block:
+    - name: chat | admin password, kept for re-runs
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: mattermost-admin
+        namespace: mattermost
+      register: r_mm_adminpw
+      no_log: true
+
+    - name: chat | admin password Secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata: { name: mattermost-admin, namespace: mattermost }
+          type: Opaque
+          stringData:
+            username: "{{ mattermost_admin_user }}"
+            password: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=20') }}"
+      when: r_mm_adminpw.resources | length == 0
+      no_log: true
+
+    - name: chat | admin password
+      kubernetes.core.k8s_info:
+        kind: Secret
+        name: mattermost-admin
+        namespace: mattermost
+      register: r_mm_adminpw
+      no_log: true
+
+    - name: chat | wait for the API
+      ansible.builtin.uri:
+        url: "{{ _mm_api }}/system/ping"
+      register: r_mm_ping
+      until: r_mm_ping.status == 200
+      retries: 30
+      delay: 10
+
+    - name: chat | create the admin (first user)
+      ansible.builtin.uri:
+        url: "{{ _mm_api }}/users"
+        method: POST
+        body_format: json
+        body:
+          email: "{{ mattermost_admin_user }}@{{ cluster_domain }}"
+          username: "{{ mattermost_admin_user }}"
+          password: "{{ r_mm_adminpw.resources[0].data.password | b64decode }}"
+        status_code: [201, 400]
+      no_log: true
+
+    - name: chat | log in
+      ansible.builtin.uri:
+        url: "{{ _mm_api }}/users/login"
+        method: POST
+        body_format: json
+        body:
+          login_id: "{{ mattermost_admin_user }}"
+          password: "{{ r_mm_adminpw.resources[0].data.password | b64decode }}"
+      register: r_mm_login
+      no_log: true
+
+    - name: chat | personal access token
+      ansible.builtin.uri:
+        url: "{{ _mm_api }}/users/me/tokens"
+        method: POST
+        headers: { Authorization: "Bearer {{ r_mm_login.token }}" }
+        body_format: json
+        body: { description: provisioner }
+        status_code: [200, 201]
+      register: r_mm_pat
+      no_log: true
+
+    - name: chat | admin token Secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata: { name: mattermost-admin-token, namespace: mattermost }
+          type: Opaque
+          stringData:
+            token: "{{ r_mm_pat.json.token }}"
+      no_log: true
+
+- name: chat | admin token
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: mattermost-admin-token
+    namespace: mattermost
+  register: r_mm_token
+  no_log: true
+
+- name: chat | the token where the operator and the bridge read it
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata: { name: mattermost-admin-token, namespace: "{{ item }}" }
+      type: Opaque
+      data:
+        token: "{{ r_mm_token.resources[0].data.token }}"
+  loop: [agent-office-operator, "{{ ocp4_workload_software_factory_namespace }}"]
+  no_log: true
+
+- name: chat | the agents team
+  ansible.builtin.uri:
+    url: "{{ _mm_api }}/teams"
+    method: POST
+    headers: { Authorization: "Bearer {{ r_mm_token.resources[0].data.token | b64decode }}" }
+    body_format: json
+    body: { name: agents, display_name: Agents, type: O }
+    status_code: [201, 400]
+  no_log: true
+
+# --- the bridge (Mattermost channel -> agent gateway)
+- name: chat | bridge source
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: { name: mm-bridge-src, namespace: "{{ ocp4_workload_software_factory_namespace }}" }
+      data:
+        bridge.py: "{{ lookup('file', 'mm-bridge.py') }}"
+
+- name: chat | bridge RBAC and Deployment
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'mm-bridge.yaml.j2') | from_yaml_all | list }}"
+
+- name: chat | facts for the guides and userinfo
+  ansible.builtin.set_fact:
+    _mattermost_url: "https://{{ mattermost_host }}"
+
+- name: chat | ready
+  ansible.builtin.debug:
+    msg: "Mattermost at {{ _mattermost_url }} (sign-in through Gitea), team agents, bridge in {{ ocp4_workload_software_factory_namespace }}"

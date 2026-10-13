@@ -67,7 +67,7 @@ keycloak_user_password: ""            # generated per-order (lookup('password', 
 
 # Stage selection. A list, or a comma-separated string when passed as an extra-var (the Field
 # Content Job does that). The first RHDP order runs: operators,showroom,userinfo
-software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, seats, mcp_gateway, showroom, verify, userinfo]
+software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, seats, mcp_gateway, showroom, verify, userinfo]
 cluster_domain: ""                    # derived from ingresses.config.openshift.io/cluster when empty
 
 # Showroom: one lab guide per seat (user1..N), the RHDP multi-user model
@@ -106,3 +106,9 @@ keycloak_realm: "{{ keycloak_realm_fallback }}"
 agent_office_console_plugin_image: quay.io/dpeterso/agent-office-plugin:v0.0.6
 agent_registry_urls: https://mindifact.ai/v1/index.json
 workshop_openshift_group: redhat-workshop-users
+
+# Chat (Mattermost)
+mattermost_host: "mattermost-mattermost.{{ cluster_domain }}"
+mattermost_admin_user: agentadmin
+bridge_guardrails_url: ""             # no guardrails service on a workshop cluster: the bridge relays unguarded
+bridge_guardrails_fail_closed: "false"

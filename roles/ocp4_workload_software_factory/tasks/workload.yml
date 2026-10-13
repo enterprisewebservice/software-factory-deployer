@@ -25,6 +25,8 @@
   when: "'agent_platform' in _stages"
 - ansible.builtin.include_tasks: rhoai_maas.yml
   when: "'rhoai_maas' in _stages"
+- ansible.builtin.include_tasks: mattermost.yml
+  when: "'mattermost' in _stages"
 - ansible.builtin.include_tasks: seats.yml
   when: "'seats' in _stages"
 - ansible.builtin.include_tasks: mcp_gateway.yml

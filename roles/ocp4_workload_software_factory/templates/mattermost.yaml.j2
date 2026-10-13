@@ -1,0 +1,227 @@
+# Mattermost (Team Edition) + PostgreSQL: vendored from agent-office/cluster/mattermost/mattermost.yaml
+# Self-hosted Mattermost — the agent platform's chat backend.
+#
+# WHY: unlike Discord (which captcha-walls programmatic bot creation),
+# Mattermost is 100% API-driven and self-hosted — every agent gets a bot
+# account + channel + DM via plain REST, no portal, no captcha, no limits.
+#
+# Team Edition (free, open source). Postgres via the OpenShift-native sclorg
+# image (runs under the restricted SCC). The DB credentials Secret is created
+# out-of-band (not in git) — see cluster/mattermost/README.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mattermost
+  labels:
+    app.kubernetes.io/part-of: agent-office
+# ====================================================================
+# PostgreSQL (OpenShift-native sclorg image; runs on restricted SCC)
+# ====================================================================
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mattermost-db
+  namespace: mattermost
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mattermost-db
+  namespace: mattermost
+  labels: { app: mattermost-db }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: mattermost-db }
+  template:
+    metadata:
+      labels: { app: mattermost-db }
+    spec:
+      containers:
+        - name: postgres
+          image: quay.io/sclorg/postgresql-15-c9s:latest
+          envFrom:
+            - secretRef: { name: mattermost-db }
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pgsql/data
+          readinessProbe:
+            exec: { command: ["/usr/libexec/check-container"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: mattermost-db }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mattermost-db
+  namespace: mattermost
+spec:
+  selector: { app: mattermost-db }
+  ports:
+    - port: 5432
+      targetPort: 5432
+# ====================================================================
+# Mattermost (Team Edition) — needs anyuid (image runs as uid 2000)
+# ====================================================================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mattermost
+  namespace: mattermost
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mattermost-anyuid
+  namespace: mattermost
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: mattermost
+    namespace: mattermost
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mattermost-data
+  namespace: mattermost
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mattermost
+  namespace: mattermost
+  labels: { app: mattermost }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: mattermost }
+  template:
+    metadata:
+      labels: { app: mattermost }
+    spec:
+      serviceAccountName: mattermost
+      securityContext:
+        runAsUser: 2000
+        fsGroup: 2000
+      containers:
+        - name: mattermost
+          image: docker.io/mattermost/mattermost-team-edition:latest
+          env:
+            # DB creds (referenced by the DSN below — must be defined first)
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: mattermost-db, key: POSTGRESQL_USER } }
+            - name: DB_PASS
+              valueFrom: { secretKeyRef: { name: mattermost-db, key: POSTGRESQL_PASSWORD } }
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: mattermost-db, key: POSTGRESQL_DATABASE } }
+            - name: MM_SQLSETTINGS_DRIVERNAME
+              value: postgres
+            - name: MM_SQLSETTINGS_DATASOURCE
+              value: "postgres://$(DB_USER):$(DB_PASS)@mattermost-db:5432/$(DB_NAME)?sslmode=disable&connect_timeout=10"
+            - name: MM_SERVICESETTINGS_SITEURL
+              value: https://{{ mattermost_host }}
+            - name: MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION
+              value: "true"
+            - name: MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS
+              value: "true"
+            - name: MM_TEAMSETTINGS_ENABLEOPENSERVER
+              value: "true"
+            - name: MM_PLUGINSETTINGS_ENABLEUPLOADS
+              value: "true"
+            # Single sign-on for seats (2026-09-01): Team Edition has no
+            # OpenID Connect, so the GitLab integration points at Gitea's
+            # OAuth2 provider — and Gitea itself signs in via Keycloak.
+            # One account everywhere; the button says so.
+            - name: MM_GITLABSETTINGS_ENABLE
+              value: "true"
+            - name: MM_GITLABSETTINGS_ID
+              valueFrom: { secretKeyRef: { name: mattermost-gitea-oauth, key: id } }
+            - name: MM_GITLABSETTINGS_SECRET
+              valueFrom: { secretKeyRef: { name: mattermost-gitea-oauth, key: secret } }
+            - name: MM_GITLABSETTINGS_SCOPE
+              value: "read:user"
+            - name: MM_GITLABSETTINGS_AUTHENDPOINT
+              value: https://{{ gitea_host }}/login/oauth/authorize
+            - name: MM_GITLABSETTINGS_TOKENENDPOINT
+              value: https://{{ gitea_host }}/login/oauth/access_token
+            - name: MM_GITLABSETTINGS_USERAPIENDPOINT
+              value: https://{{ gitea_host }}/api/v1/user
+            - name: MM_GITLABSETTINGS_BUTTONTEXT
+              value: Sign in with your workshop account
+            - name: MM_GITLABSETTINGS_BUTTONCOLOR
+              value: "#ee0000"
+            # Seat removal deletes the person's chat account for real
+            # (otherwise a re-signup collides with a deactivated ghost).
+            - name: MM_SERVICESETTINGS_ENABLEAPIUSERDELETION
+              value: "true"
+          ports:
+            - containerPort: 8065
+          volumeMounts:
+            - name: data
+              mountPath: /mattermost/data
+          readinessProbe:
+            httpGet: { path: /api/v4/system/ping, port: 8065 }
+            initialDelaySeconds: 25
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/v4/system/ping, port: 8065 }
+            initialDelaySeconds: 90
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "2", memory: 2Gi }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: mattermost-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mattermost
+  namespace: mattermost
+spec:
+  selector: { app: mattermost }
+  ports:
+    - name: http
+      port: 8065
+      targetPort: 8065
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mattermost
+  namespace: mattermost
+spec:
+  # The SSO-only sign-in page (front.yaml) fronts the server; see README.
+  to: { kind: Service, name: mattermost-front }
+  port: { targetPort: http }
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
