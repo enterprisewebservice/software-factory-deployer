@@ -112,7 +112,21 @@
   ansible.builtin.include_tasks: rhdh_gitea_templates.yml
   when: git_provider == 'gitea'
 
-# --- the Helm release
+# --- the Helm release (a failed first install blocks upgrades: remove it and install again)
+- name: rhdh | release status
+  kubernetes.core.helm_info:
+    name: "{{ rhdh_release }}"
+    release_namespace: "{{ rhdh_namespace }}"
+  register: r_rhdh_info
+
+- name: rhdh | drop a failed release so the install can be retried cleanly
+  kubernetes.core.helm:
+    name: "{{ rhdh_release }}"
+    release_namespace: "{{ rhdh_namespace }}"
+    state: absent
+    wait: true
+  when: (r_rhdh_info.status | default({})).get('status', '') in ['failed', 'pending-install', 'pending-upgrade']
+
 - name: rhdh | Helm release {{ rhdh_release }} (chart {{ rhdh_chart_version }})
   kubernetes.core.helm:
     name: "{{ rhdh_release }}"
@@ -151,8 +165,10 @@
             - rhdh-gitea-credentials
             - rhdh-argocd-credentials
             - rhdh-k8s-credentials
+          # the chart's own volumes and mounts, plus the RBAC files (a list override replaces the defaults)
           extraVolumeMounts:
             - { name: dynamic-plugins-root, mountPath: /opt/app-root/src/dynamic-plugins-root }
+            - { name: extensions-catalog, mountPath: /extensions }
             - { name: temp, mountPath: /tmp }
             - { name: rbac-policies, mountPath: /opt/app-root/src/rbac }
           extraVolumes:
@@ -162,6 +178,11 @@
                   spec:
                     accessModes: [ReadWriteOnce]
                     resources: { requests: { storage: 5Gi } }
+            - { name: dynamic-plugins, configMap: { defaultMode: 420, name: "{{ rhdh_release }}-dynamic-plugins", optional: true } }
+            - { name: dynamic-plugins-npmrc, secret: { defaultMode: 420, optional: true, secretName: "{{ rhdh_release }}-dynamic-plugins-npmrc" } }
+            - { name: dynamic-plugins-registry-auth, secret: { defaultMode: 416, optional: true, secretName: "{{ rhdh_release }}-dynamic-plugins-registry-auth" } }
+            - { name: npmcacache, emptyDir: {} }
+            - { name: extensions-catalog, emptyDir: {} }
             - { name: temp, emptyDir: {} }
             - { name: rbac-policies, configMap: { name: rbac-policies } }
   register: r_rhdh_helm

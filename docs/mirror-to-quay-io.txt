@@ -7,7 +7,6 @@ quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-
 quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skills:v0.0.6=quay.io/dpeterso/agent-office-skills:v0.0.6
 quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-skills:v0.0.8-lock=quay.io/dpeterso/agent-office-skills:v0.0.8-lock
 quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/agent-office-source-filtered-entity-picker:v0.0.4=quay.io/dpeterso/agent-office-source-filtered-entity-picker:v0.0.4
-quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/autoresearch-trainer:v0.0.13=quay.io/dpeterso/autoresearch-trainer:v0.0.13
 quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/openclaw:v2026.7.1=quay.io/dpeterso/openclaw:v2026.7.1
 quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/projectboard-mcp:v0.0.2=quay.io/dpeterso/projectboard-mcp:v0.0.2
 quay-quay-quay-test.apps.salamander.aimlworkbench.com/deanpeterson/seat-triage-mcp:v0.1.3=quay.io/dpeterso/seat-triage-mcp:v0.1.3
