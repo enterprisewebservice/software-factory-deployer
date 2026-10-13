@@ -130,7 +130,7 @@ spec:
             pip install --quiet -r requirements.txt
           fi
 
-          EXTRA_VARS="cluster_domain=${CLUSTER_DOMAIN} cluster_api_url=${CLUSTER_API_URL} namespace=${NAMESPACE}"
+          EXTRA_VARS="cluster_domain=${CLUSTER_DOMAIN} cluster_api_url=${CLUSTER_API_URL} runner_namespace=${NAMESPACE}"
           {{- range $key, $value := .Values.ansible.extraVars }}
           EXTRA_VARS="$EXTRA_VARS {{ $key }}={{ $value }}"
           {{- end }}

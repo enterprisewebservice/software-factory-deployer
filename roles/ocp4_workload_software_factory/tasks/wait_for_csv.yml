@@ -1,8 +1,11 @@
 ---
+# AllNamespaces operators get a CSV copy in every namespace, so one namespace answers for all
+# of them and the result stays small (a cluster-wide list is huge and is not logged safely).
 - name: "Wait for CSV: {{ csv_operator }}"
   kubernetes.core.k8s_info:
     api_version: operators.coreos.com/v1alpha1
     kind: ClusterServiceVersion
+    namespace: "{{ csv_namespace | default('openshift-operators') }}"
   register: r_csv
   retries: 60
   delay: 10
@@ -10,3 +13,8 @@
     r_csv.resources | selectattr('metadata.name', 'search', csv_operator)
     | selectattr('status.phase', 'defined') | selectattr('status.phase', 'equalto', 'Succeeded')
     | list | length > 0
+  no_log: true
+
+- name: "CSV ready: {{ csv_operator }}"
+  ansible.builtin.debug:
+    msg: "{{ r_csv.resources | selectattr('metadata.name', 'search', csv_operator) | map(attribute='metadata.name') | list }}"

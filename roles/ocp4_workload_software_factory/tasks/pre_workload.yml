@@ -14,9 +14,11 @@
 - name: pre | cluster ingress domain and API URL
   kubernetes.core.k8s_info:
     api_version: config.openshift.io/v1
-    kind: "{{ item }}"
+    kind: "{{ _cfg_kind }}"
     name: cluster
   loop: [Ingress, Infrastructure]
+  loop_control:
+    loop_var: _cfg_kind
   register: r_cluster_cfg
 
 - name: pre | derived cluster facts

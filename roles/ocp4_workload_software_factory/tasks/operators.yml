@@ -5,15 +5,17 @@
 #   - the OpenShift AI operator gets its namespace + OperatorGroup first;
 #   - the agent-office operator is left out until agent_office_catalog_image names a catalog
 #     the cluster can pull (today the images live only in the reference cluster's Quay).
-- name: operators | list installed ClusterServiceVersions
+# Subscriptions are few and small. A cluster-wide CSV list is not: OLM copies every
+# AllNamespaces CSV into every namespace, and dumping that result killed the first RHDP run.
+- name: operators | list existing Subscriptions (package names already installed)
   kubernetes.core.k8s_info:
     api_version: operators.coreos.com/v1alpha1
-    kind: ClusterServiceVersion
-  register: r_csv_all
+    kind: Subscription
+  register: r_subs_all
 
 - name: operators | build the subscription list
   ansible.builtin.set_fact:
-    _installed_csv_names: "{{ r_csv_all.resources | map(attribute='metadata.name') | list | unique }}"
+    _installed_packages: "{{ r_subs_all.resources | map(attribute='spec.name') | list | unique }}"
     _subscriptions: >-
       {{
         [
@@ -40,14 +42,20 @@
     - { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: redhat-ods-operator, namespace: redhat-ods-operator }, spec: {} }
   loop_control: { label: "{{ item.kind }}" }
 
-- name: operators | subscriptions (skipping packages that already have a CSV)
+- name: operators | already installed by the base (skipped)
+  ansible.builtin.debug:
+    msg: "{{ _subscriptions | map(attribute='name') | select('in', _installed_packages) | list }}"
+
+- name: operators | subscriptions (skipping packages that already have one)
   kubernetes.core.k8s:
     definition: "{{ lookup('template', 'subscription.yml.j2') | from_yaml }}"
   loop: "{{ _subscriptions }}"
   loop_control: { label: "{{ item.name }}" }
-  when: "_installed_csv_names | select('match', '^' ~ item.name ~ '[.]v') | list | length == 0"
+  when: item.name not in _installed_packages
 
-- name: operators | wait for the CSVs the later stages depend on
+# Wait only for what this run subscribed. A package the base (or an earlier run) installed is
+# its owner's responsibility; blocking on it would turn their failure into ours.
+- name: operators | wait for the CSVs of the subscriptions this run created
   ansible.builtin.include_tasks: wait_for_csv.yml
-  loop: "{{ ['openshift-gitops-operator', 'openshift-pipelines-operator-rh', 'rhods-operator'] + (['agent-office-operator'] if agent_office_catalog_image | length > 0 else []) }}"
+  loop: "{{ ['openshift-gitops-operator', 'openshift-pipelines-operator-rh', 'rhods-operator', 'agent-office-operator'] | reject('in', _installed_packages) | select('in', _subscriptions | map(attribute='name') | list) | list }}"
   loop_control: { loop_var: csv_operator }
