@@ -1,0 +1,137 @@
+---
+# Gitea install: the RHPDS gitea-operator (the same operator the reference cluster runs),
+# following rhpds/core_workloads ocp4_workload_gitea_operator. The Gitea CR creates the
+# admin user and user1..N; gitea.yml then configures orgs, tokens and Secrets on top.
+# Idempotent: every object is state=present and every wait reads status.
+
+- name: gitea install | CatalogSource for the RHPDS gitea operator
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: CatalogSource
+      metadata:
+        name: gitea-operator-catalogsource
+        namespace: openshift-marketplace
+      spec:
+        sourceType: grpc
+        image: "{{ gitea_catalog_image }}:{{ gitea_catalog_image_tag }}"
+        displayName: Gitea Operator (RHPDS)
+        publisher: RHPDS
+
+- name: gitea install | operator namespace and OperatorGroup
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - { apiVersion: v1, kind: Namespace, metadata: { name: gitea-operator } }
+    - { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: gitea-operator, namespace: gitea-operator }, spec: {} }
+  loop_control: { label: "{{ item.kind }}" }
+
+- name: gitea install | Subscription
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: gitea-operator
+        namespace: gitea-operator
+      spec:
+        name: gitea-operator
+        channel: "{{ gitea_operator_channel }}"
+        source: gitea-operator-catalogsource
+        sourceNamespace: openshift-marketplace
+        installPlanApproval: Automatic
+
+- name: gitea install | wait for the operator CSV
+  ansible.builtin.include_tasks: wait_for_csv.yml
+  vars:
+    csv_operator: gitea-operator
+    csv_namespace: gitea-operator
+
+- name: gitea install | application namespace (and the Developer Hub namespace the configure stage writes a Secret into)
+  kubernetes.core.k8s:
+    state: present
+    definition: { apiVersion: v1, kind: Namespace, metadata: { name: "{{ item }}" } }
+  loop: ["{{ gitea_namespace }}", "{{ rhdh_namespace }}"]
+
+- name: gitea install | Gitea instance (admin + user1..N created by the operator)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: pfe.rhpds.com/v1
+      kind: Gitea
+      metadata:
+        name: gitea
+        namespace: "{{ gitea_namespace }}"
+      spec:
+        giteaImage: "{{ gitea_image }}"
+        giteaImageTag: "{{ gitea_image_tag }}"
+        giteaImagePullPolicy: IfNotPresent
+        giteaVolumeSize: 10Gi
+        postgresqlImage: registry.redhat.io/rhel9/postgresql-16
+        postgresqlImageTag: latest
+        postgresqlVolumeSize: 10Gi
+        giteaSsl: true
+        giteaAdminUser: "{{ gitea_admin_user }}"
+        giteaAdminEmail: "{{ gitea_admin_user }}@{{ cluster_domain }}"
+        giteaAdminPasswordLength: 20
+        giteaCreateUsers: true
+        giteaUserNumber: "{{ num_users | int }}"
+        giteaGenerateUserFormat: "{{ keycloak_user_prefix }}%d"
+        giteaUserPassword: "{{ workshop_user_password }}"
+        giteaUserEmailDomain: "{{ cluster_domain }}"
+        giteaDisableRegistration: true
+        giteaEnableCaptcha: false
+        giteaAllowCreateOrganization: true
+        giteaRegisterEmailConfirm: false
+        giteaEnableNotifyMail: false
+  register: r_gitea_cr
+  until: r_gitea_cr is success
+  retries: 6
+  delay: 20
+
+- name: gitea install | wait for the route, the admin and the users
+  kubernetes.core.k8s_info:
+    api_version: pfe.rhpds.com/v1
+    kind: Gitea
+    name: gitea
+    namespace: "{{ gitea_namespace }}"
+  register: r_gitea_status
+  until:
+    - r_gitea_status.resources | length > 0
+    - r_gitea_status.resources[0].status.giteaRoute is defined
+    - r_gitea_status.resources[0].status.adminSetupComplete is defined
+    - r_gitea_status.resources[0].status.adminSetupComplete | bool
+    - r_gitea_status.resources[0].status.userSetupComplete is defined
+    - r_gitea_status.resources[0].status.userSetupComplete | bool
+  retries: 90
+  delay: 20
+  no_log: true
+
+- name: gitea install | facts from the instance status
+  ansible.builtin.set_fact:
+    gitea_host: "{{ r_gitea_status.resources[0].status.giteaRoute | regex_replace('^https?://', '') | regex_replace('/$', '') }}"
+    _gitea_admin_password: "{{ r_gitea_status.resources[0].status.adminPassword }}"
+  no_log: true
+
+# gitea.yml reads the admin password from this Secret (the reference cluster's shape)
+- name: gitea install | admin credentials Secret for the configure stage
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gitea-admin-credentials
+        namespace: "{{ gitea_namespace }}"
+      type: Opaque
+      stringData:
+        username: "{{ gitea_admin_user }}"
+        password: "{{ _gitea_admin_password }}"
+  no_log: true
+
+- name: gitea install | ready
+  ansible.builtin.debug:
+    msg: "Gitea at https://{{ gitea_host }} with admin {{ gitea_admin_user }} and {{ num_users }} users"

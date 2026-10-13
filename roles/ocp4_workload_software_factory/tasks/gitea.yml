@@ -26,6 +26,9 @@
 #   - the agent-office AppProject + agent-office-agents ApplicationSet
 #     (gitea flavor of the reference cluster's manifests).
 
+- name: gitea | install (operator + instance + admin + users)
+  ansible.builtin.include_tasks: gitea_install.yml
+
 - name: gitea | fail fast when the install prerequisite is missing
   kubernetes.core.k8s_info:
     api_version: route.openshift.io/v1

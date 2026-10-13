@@ -9,14 +9,14 @@
     showroom_content_git_repo_ref: "{{ showroom_content_ref }}"
     showroom_user_data:
       user: "{{ keycloak_user_prefix }}{{ _seat_n }}"
-      password: "{{ keycloak_user_password if (keycloak_user_password | length > 0) else 'ask-your-instructor' }}"
+      password: "{{ workshop_user_password }}"
+      gitea_url: "{{ 'https://' ~ gitea_host if (gitea_host | default('') | length > 0) else 'not-deployed-yet' }}"
       seat_mode: "{{ showroom_seat_mode }}"
       openshift_console_url: "{{ _console_url }}"
       openshift_api_url: "{{ _api_url }}"
       gitops_url: "{{ _gitops_url }}"
       devhub_url: "{{ _devhub_url | default('not-deployed-yet') }}"
       mattermost_url: "{{ _mattermost_url | default('not-deployed-yet') }}"
-      gitea_url: "{{ _gitea_url | default('not-deployed-yet') }}"
       ocp_version: "{{ _ocp_minor }}"
 
 - name: "showroom | record the guide URL for {{ keycloak_user_prefix }}{{ _seat_n }}"

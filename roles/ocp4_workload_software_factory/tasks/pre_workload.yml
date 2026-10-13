@@ -36,3 +36,6 @@
 - name: pre | cluster
   ansible.builtin.debug:
     msg: "OpenShift {{ _ocp_version }}, apps domain {{ cluster_domain }}, API {{ _api_url }}"
+
+- name: pre | per-order workshop password (Gitea, Mattermost)
+  ansible.builtin.include_tasks: workshop_password.yml

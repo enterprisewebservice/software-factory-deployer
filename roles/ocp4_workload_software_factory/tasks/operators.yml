@@ -24,7 +24,7 @@
           {'name': 'rhods-operator', 'ns': 'redhat-ods-operator', 'source': 'redhat-operators', 'channel': 'stable'},
           {'name': 'external-secrets-operator', 'ns': 'openshift-operators', 'source': 'community-operators', 'channel': eso_channel},
           {'name': 'mcp-gateway', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': mcp_gateway_channel}
-        ] + ([{'name': 'agent-office-operator', 'ns': 'openshift-operators', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel}]
+        ] + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel}]
              if agent_office_catalog_image | length > 0 else [])
       }}
 
@@ -58,6 +58,16 @@
 - name: operators | already installed by the base (skipped)
   ansible.builtin.debug:
     msg: "{{ _subscriptions | map(attribute='name') | select('in', _installed_packages) | list }}"
+
+- name: operators | agent-office operator namespace and OperatorGroup (AllNamespaces, as on the reference cluster)
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - { apiVersion: v1, kind: Namespace, metadata: { name: agent-office-operator } }
+    - { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: agent-office-operator, namespace: agent-office-operator }, spec: {} }
+  loop_control: { label: "{{ item.kind }}" }
+  when: agent_office_catalog_image | length > 0 and 'agent-office-operator' not in _installed_packages
 
 - name: operators | subscriptions (skipping packages that already have one)
   kubernetes.core.k8s:
