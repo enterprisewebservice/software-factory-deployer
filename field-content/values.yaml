@@ -56,7 +56,7 @@ ansible:
     showroom_content_repo: "https://github.com/enterprisewebservice/showroom-openshift-software-factory.git"
     showroom_content_ref: "main"
     showroom_seat_mode: "static"
-    rhdh_custom_plugins: "false"
+    rhdh_custom_plugins: "true"
 
 # Container configuration (the image RHDP tested the template with)
 image:
