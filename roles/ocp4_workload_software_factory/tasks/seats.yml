@@ -1,0 +1,16 @@
+---
+# Seats: one isolated workspace per attendee (user1..N), the RHDP flavour of what the factory
+# hub's provisioner does per self-service seat on the reference cluster.
+- name: seats | per-seat workspaces
+  ansible.builtin.include_tasks: seat.yml
+  vars:
+    _seat: "{{ keycloak_user_prefix }}{{ _seat_i }}"
+    _seat_ns: "{{ keycloak_user_prefix }}{{ _seat_i }}-agent-workspace"
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  loop_control:
+    loop_var: _seat_i
+    label: "{{ keycloak_user_prefix }}{{ _seat_i }}"
+
+- name: seats | done
+  ansible.builtin.debug:
+    msg: "{{ num_users }} seats: <user>-agent-workspace namespaces with RBAC, quota, limits, isolation and Gitea tokens"

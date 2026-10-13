@@ -1,0 +1,135 @@
+---
+# One seat: what the factory hub's provisioner stamps per attendee on the reference cluster
+# (deploy/salamander-factory-hub/files/seat-policy.yaml), for user {{ _seat }}.
+# Objects that need the agent platform (SCC ClusterRole, Mattermost bridge) are bound only
+# when their ClusterRole exists, so the stage is correct before and after that stage runs.
+
+- name: "seat {{ _seat }} | namespaces"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item.name }}"
+        labels: "{{ item.labels }}"
+  loop:
+    - name: "{{ _seat_ns }}"
+      labels:
+        agentoffice.ai/managed: "true"
+        agentoffice.ai/chat-provisioning: enabled
+        factory-hub.redhat.com/seat: "true"
+        software-factory.redhat.com/seat: "{{ _seat }}"
+    - name: "showroom-{{ _seat }}"
+      labels:
+        software-factory.redhat.com/seat: "{{ _seat }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: "seat {{ _seat }} | role bindings (attendee, terminal service account)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: "{{ item.name }}"
+        namespace: "{{ item.ns }}"
+        labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+      roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: "{{ item.role }}" }
+      subjects: ["{{ item.subject }}"]
+  loop:
+    - { name: seat-user-admin, ns: "{{ _seat_ns }}", role: admin, subject: { kind: User, apiGroup: rbac.authorization.k8s.io, name: "{{ _seat }}" } }
+    - { name: seat-terminal-admin, ns: "{{ _seat_ns }}", role: admin, subject: { kind: ServiceAccount, name: showroom, namespace: "showroom-{{ _seat }}" } }
+    - { name: seat-owner-view, ns: "showroom-{{ _seat }}", role: view, subject: { kind: User, apiGroup: rbac.authorization.k8s.io, name: "{{ _seat }}" } }
+  loop_control: { label: "{{ item.ns }}/{{ item.name }}" }
+
+- name: "seat {{ _seat }} | quota, limits, isolation"
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - apiVersion: v1
+      kind: ResourceQuota
+      metadata: { name: seat-quota, namespace: "{{ _seat_ns }}" }
+      spec:
+        hard:
+          pods: "60"
+          requests.cpu: "16"
+          requests.memory: 32Gi
+          limits.cpu: "32"
+          limits.memory: 64Gi
+          persistentvolumeclaims: "10"
+          requests.storage: 60Gi
+    - apiVersion: v1
+      kind: LimitRange
+      metadata: { name: seat-limits, namespace: "{{ _seat_ns }}" }
+      spec:
+        limits:
+          - type: Container
+            default: { cpu: "1", memory: 2Gi }
+            defaultRequest: { cpu: 100m, memory: 256Mi }
+            max: { cpu: "8", memory: 16Gi }
+    - apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata: { name: seat-isolation, namespace: "{{ _seat_ns }}" }
+      spec:
+        podSelector: {}
+        policyTypes: [Ingress]
+        ingress:
+          - from:
+              - podSelector: {}
+              - namespaceSelector:
+                  matchExpressions:
+                    - { key: factory-hub.redhat.com/seat, operator: DoesNotExist }
+  loop_control: { label: "{{ item.kind }}" }
+
+- name: "seat {{ _seat }} | Gitea token from the gitea stage"
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: "{{ _seat }}-gitea-token"
+    namespace: "{{ gitea_namespace }}"
+  register: r_seat_gitea_token
+  no_log: true
+
+- name: "seat {{ _seat }} | Gitea token in the seat (the gateway renders it into the Gitea tool)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ _seat }}-gitea-token"
+        namespace: "{{ _seat_ns }}"
+        labels: { software-factory.redhat.com/seat: "{{ _seat }}" }
+      type: Opaque
+      data:
+        GITEA_TOKEN: "{{ r_seat_gitea_token.resources[0].data.GITEA_TOKEN }}"
+        api_key: "{{ r_seat_gitea_token.resources[0].data.GITEA_TOKEN }}"
+  when: r_seat_gitea_token.resources | length > 0
+  no_log: true
+
+- name: "seat {{ _seat }} | platform ClusterRoles present?"
+  kubernetes.core.k8s_info:
+    api_version: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    name: "{{ item }}"
+  loop: [use-agent-office-imagevol-scc, mm-bridge-seat]
+  register: r_seat_croles
+
+- name: "seat {{ _seat }} | platform bindings (only when the platform stage has created the roles)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: "{{ item.name }}"
+        namespace: "{{ _seat_ns }}"
+        labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+      roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: "{{ item.role }}" }
+      subjects: ["{{ item.subject }}"]
+  loop:
+    - { name: agent-office-imagevol-default-sa, role: use-agent-office-imagevol-scc, subject: { kind: ServiceAccount, name: default, namespace: "{{ _seat_ns }}" } }
+    - { name: mm-bridge, role: mm-bridge-seat, subject: { kind: ServiceAccount, name: mm-bridge, namespace: "{{ ocp4_workload_software_factory_namespace }}" } }
+  loop_control: { label: "{{ item.name }}" }
+  when: (r_seat_croles.results | selectattr('item', 'equalto', item.role) | first).resources | length > 0

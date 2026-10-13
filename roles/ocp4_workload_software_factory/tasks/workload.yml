@@ -1,6 +1,6 @@
 ---
 # Install order matters: operators → gitea → gitops bootstrap → RHOAI/MaaS → RHDH → identity/users →
-# agent platform → showroom → verify → userinfo. Each stage gates on health before the next.
+# agent platform → seats → showroom → verify → userinfo. Each stage gates on health before the next.
 # software_factory_stages selects the stages (a list, or a comma-separated string when it
 # arrives as an extra-var from the Field Content Job). First RHDP order: operators,showroom,userinfo.
 - name: workload | resolve the stage list
@@ -25,6 +25,8 @@
   when: "'rhdh' in _stages"
 - ansible.builtin.include_tasks: agent_platform.yml
   when: "'agent_platform' in _stages"
+- ansible.builtin.include_tasks: seats.yml
+  when: "'seats' in _stages"
 - ansible.builtin.include_tasks: showroom.yml
   when: "'showroom' in _stages"
 - ansible.builtin.include_tasks: verify.yml
