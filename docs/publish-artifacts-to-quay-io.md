@@ -74,8 +74,10 @@ the `quay` stage fails at the mirror step and names the missing source.
 
 The hire flow resolves skills from mindifact.ai. Version 1.0.6 (this repository,
 `tools/mindifact/skills/golden-path-service/SKILL.md`) makes the image path come from the
-request instead of a hardcoded registry, and carries the 1.0.4/1.0.5 fixes that were never
-published (mcp pin bounds, `host="0.0.0.0"`). Publish it with the registry token:
+request instead of a hardcoded registry, sizes the build for shared clusters (a `taskRunSpecs`
+block in the pipeline template: without it the buildah step's 4.6 CPU / 8 GiB request never
+schedules on an RHDP worker), and carries the 1.0.4/1.0.5 fixes that were never published
+(mcp pin bounds, `host="0.0.0.0"`). Publish it with the registry token:
 
 ```bash
 cd tools/mindifact
