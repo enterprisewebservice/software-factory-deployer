@@ -127,6 +127,23 @@
     wait: true
   when: (r_rhdh_info.status | default({})).get('status', '') in ['failed', 'pending-install', 'pending-upgrade']
 
+# The pods read their credential Secrets at start. A checksum of them on the pod template
+# rolls Developer Hub whenever a credential changed (a re-minted Gitea token, a new OIDC
+# client secret), instead of leaving the running pods with stale copies.
+- name: rhdh | credential Secrets the pods read
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: "{{ item }}"
+    namespace: "{{ rhdh_namespace }}"
+  register: r_rhdh_cred_secrets
+  loop: [rhdh-workshop-oidc, rhdh-gitea-credentials, rhdh-argocd-credentials, rhdh-k8s-credentials]
+  no_log: true
+
+- name: rhdh | credentials checksum
+  ansible.builtin.set_fact:
+    _rhdh_creds_checksum: "{{ r_rhdh_cred_secrets.results | map(attribute='resources') | map('default', []) | map('map', attribute='data') | map('list') | list | to_json | hash('sha256') }}"
+  no_log: true
+
 - name: rhdh | Helm release {{ rhdh_release }} (chart {{ rhdh_chart_version }})
   kubernetes.core.helm:
     name: "{{ rhdh_release }}"
@@ -152,6 +169,8 @@
           insecureEdgeTerminationPolicy: Redirect
       upstream:
         backstage:
+          podAnnotations:
+            software-factory.redhat.com/credentials-checksum: "{{ _rhdh_creds_checksum }}"
           appConfig:
             app: { baseUrl: "https://{{ rhdh_host }}" }
             backend:

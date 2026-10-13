@@ -110,29 +110,64 @@
 
 # One admin token serves both consumers (publish runs as the platform, not
 # the attendee — same trust model as the reference cluster's GitHub App).
-- name: gitea | mint the platform API token (recreate to stay idempotent)
-  ansible.builtin.uri:
-    url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens/agent-platform"
-    method: DELETE
-    url_username: "{{ gitea_admin_user }}"
-    url_password: "{{ _gitea_admin_password }}"
-    force_basic_auth: true
-    status_code: [204, 404]
+#
+# The token is minted once and kept: Developer Hub reads its copy at pod start, so a
+# token rotated on every run left the scaffolder with a stale one after any re-run
+# (401 on fetch:template, found 13 October 2026). A re-run keeps the stored token as
+# long as Gitea still accepts it and mints a new one only when it is missing or dead.
+- name: gitea | stored platform token, if any
+  kubernetes.core.k8s_info:
+    kind: Secret
+    name: "{{ gitea_rhdh_secret_name }}"
+    namespace: "{{ rhdh_namespace | default('rhdh') }}"
+  register: r_gitea_rhdh_secret
   no_log: true
 
-- name: gitea | create the platform API token
+- name: gitea | does the stored platform token still authenticate?
   ansible.builtin.uri:
-    url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens"
-    method: POST
-    url_username: "{{ gitea_admin_user }}"
-    url_password: "{{ _gitea_admin_password }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      name: agent-platform
-      scopes: ["all"]
-    status_code: [201]
-  register: r_gitea_token
+    url: "{{ _gitea_api }}/user"
+    headers: { Authorization: "token {{ r_gitea_rhdh_secret.resources[0].data.GITEA_PASSWORD | b64decode }}" }
+    status_code: [200, 401, 403]
+    validate_certs: false
+  register: r_gitea_token_probe
+  when: r_gitea_rhdh_secret.resources | length > 0
+  no_log: true
+
+- name: gitea | platform token verdict
+  ansible.builtin.set_fact:
+    _gitea_platform_token_ok: "{{ (r_gitea_rhdh_secret.resources | length > 0) and ((r_gitea_token_probe.status | default(0)) == 200) }}"
+
+- name: gitea | mint the platform API token (only when missing or no longer accepted)
+  when: not (_gitea_platform_token_ok | bool)
+  block:
+    - name: gitea | drop a dead platform token of the same name
+      ansible.builtin.uri:
+        url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens/agent-platform"
+        method: DELETE
+        url_username: "{{ gitea_admin_user }}"
+        url_password: "{{ _gitea_admin_password }}"
+        force_basic_auth: true
+        status_code: [204, 404]
+      no_log: true
+
+    - name: gitea | create the platform API token
+      ansible.builtin.uri:
+        url: "{{ _gitea_api }}/users/{{ gitea_admin_user }}/tokens"
+        method: POST
+        url_username: "{{ gitea_admin_user }}"
+        url_password: "{{ _gitea_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: agent-platform
+          scopes: ["all"]
+        status_code: [201]
+      register: r_gitea_token
+      no_log: true
+
+- name: gitea | the platform token in use
+  ansible.builtin.set_fact:
+    _gitea_platform_token: "{{ (r_gitea_rhdh_secret.resources[0].data.GITEA_PASSWORD | b64decode) if (_gitea_platform_token_ok | bool) else r_gitea_token.json.sha1 }}"
   no_log: true
 
 - name: gitea | publish credentials Secret for RHDH (publish:gitea integration)
@@ -147,7 +182,7 @@
       type: Opaque
       stringData:
         GITEA_USERNAME: "{{ gitea_admin_user }}"
-        GITEA_PASSWORD: "{{ r_gitea_token.json.sha1 }}"
+        GITEA_PASSWORD: "{{ _gitea_platform_token }}"
   no_log: true
 
 - name: gitea | scm token Secret for the ApplicationSet generators
@@ -161,7 +196,7 @@
         namespace: openshift-gitops
       type: Opaque
       stringData:
-        token: "{{ r_gitea_token.json.sha1 }}"
+        token: "{{ _gitea_platform_token }}"
   no_log: true
 
 # Per-seat agent tokens — the pass-through credential each seat's own
@@ -176,7 +211,48 @@
 # <user>-agent-workspace is the imperative companion documented in
 # deploy/salamander-workspaces/manifests.yaml. Recreate-on-run rotates
 # the tokens: re-replicate the workspace copies after a re-run.
-- name: gitea | mint per-attendee agent tokens (recreate to stay idempotent)
+# Minted once per seat and kept: the seat's AgentGateway pods read their copy at start,
+# so a token rotated on every run would leave every running agent with a dead one after a
+# re-run. A seat gets a new token only when its canonical Secret is missing or Gitea no
+# longer accepts the stored one.
+- name: gitea | stored per-seat tokens
+  kubernetes.core.k8s_info:
+    kind: Secret
+    namespace: "{{ gitea_namespace }}"
+    label_selectors: ["app.kubernetes.io/managed-by=software-factory-deployer"]
+  register: r_gitea_seat_secrets
+  no_log: true
+
+- name: gitea | stored per-seat tokens by seat
+  ansible.builtin.set_fact:
+    _seat_tokens_stored: >-
+      {%- set m = {} -%}
+      {%- for sec in (r_gitea_seat_secrets.resources | default([])) -%}
+        {%- set seat = sec.metadata.labels['software-factory.redhat.com/seat'] | default('') -%}
+        {%- if seat and sec.metadata.name == seat ~ '-gitea-token' and (sec.data.GITEA_TOKEN is defined) -%}
+          {%- set _ = m.update({seat: (sec.data.GITEA_TOKEN | b64decode)}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ m }}
+  no_log: true
+
+- name: gitea | do the stored per-seat tokens still authenticate?
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/user"
+    headers: { Authorization: "token {{ _seat_tokens_stored[keycloak_user_prefix ~ item] | default('none') }}" }
+    status_code: [200, 401, 403]
+    validate_certs: false
+  register: r_gitea_seat_probe
+  loop: "{{ range(1, num_users | int + 1) | list }}"
+  loop_control: { label: "{{ keycloak_user_prefix }}{{ item }}" }
+  no_log: true
+
+- name: gitea | seats that need a token
+  ansible.builtin.set_fact:
+    _seats_needing_token: >-
+      {{ r_gitea_seat_probe.results | rejectattr('status', 'equalto', 200) | map(attribute='item') | list }}
+
+- name: gitea | drop a dead per-seat token of the same name
   ansible.builtin.uri:
     url: "{{ _gitea_api }}/users/{{ keycloak_user_prefix }}{{ item }}/tokens/agent-workspace"
     method: DELETE
@@ -184,10 +260,11 @@
     url_password: "{{ _gitea_admin_password }}"
     force_basic_auth: true
     status_code: [204, 404]
-  loop: "{{ range(1, num_users | int + 1) | list }}"
+  loop: "{{ _seats_needing_token }}"
+  loop_control: { label: "{{ keycloak_user_prefix }}{{ item }}" }
   no_log: true
 
-- name: gitea | create per-attendee agent tokens
+- name: gitea | create per-attendee agent tokens (seats without a live one)
   ansible.builtin.uri:
     url: "{{ _gitea_api }}/users/{{ keycloak_user_prefix }}{{ item }}/tokens"
     method: POST
@@ -200,7 +277,26 @@
       scopes: ["all"]
     status_code: [201]
   register: r_gitea_seat_tokens
-  loop: "{{ range(1, num_users | int + 1) | list }}"
+  loop: "{{ _seats_needing_token }}"
+  loop_control: { label: "{{ keycloak_user_prefix }}{{ item }}" }
+  no_log: true
+
+- name: gitea | per-seat tokens in use (kept ones plus the new ones)
+  ansible.builtin.set_fact:
+    _seat_tokens: >-
+      {%- set m = {} -%}
+      {%- for n in range(1, num_users | int + 1) -%}
+        {%- set u = keycloak_user_prefix ~ n -%}
+        {%- if u in _seat_tokens_stored and n not in _seats_needing_token -%}
+          {%- set _ = m.update({u: _seat_tokens_stored[u]}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {%- for r in (r_gitea_seat_tokens.results | default([])) -%}
+        {%- if r.json is defined -%}
+          {%- set _ = m.update({(keycloak_user_prefix ~ r.item): r.json.sha1}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ m }}
   no_log: true
 
 - name: gitea | canonical per-seat token Secrets
@@ -210,17 +306,17 @@
       apiVersion: v1
       kind: Secret
       metadata:
-        name: "{{ keycloak_user_prefix }}{{ item.item }}-gitea-token"
+        name: "{{ item.key }}-gitea-token"
         namespace: "{{ gitea_namespace }}"
         labels:
           app.kubernetes.io/managed-by: software-factory-deployer
-          software-factory.redhat.com/seat: "{{ keycloak_user_prefix }}{{ item.item }}"
+          software-factory.redhat.com/seat: "{{ item.key }}"
       type: Opaque
       stringData:
-        GITEA_TOKEN: "{{ item.json.sha1 }}"
-  loop: "{{ r_gitea_seat_tokens.results }}"
+        GITEA_TOKEN: "{{ item.value }}"
+  loop: "{{ _seat_tokens | dict2items }}"
   loop_control:
-    label: "{{ keycloak_user_prefix }}{{ item.item }}"
+    label: "{{ item.key }}"
   no_log: true
 
 # Broker discovery credential for the gitea MCPServerRegistration — the
