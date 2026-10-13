@@ -276,10 +276,17 @@ def bot_token(uid):
     tok = BOT_TOKENS.get(uid)
     if tok:
         return tok
-    st, old = api("GET", f"/api/v4/users/{uid}/tokens?per_page=200")
-    for t in (old or []) if st == 200 else []:
-        if t.get("description") == "bridge":
+    revoked = 0
+    for _ in range(50):  # pages of 200; the pile on a long-lived bridge ran past 400
+        st, old = api("GET", f"/api/v4/users/{uid}/tokens?page=0&per_page=200")
+        stale = [t for t in (old or []) if st == 200 and t.get("description") == "bridge"]
+        if not stale:
+            break
+        for t in stale:
             api("POST", "/api/v4/users/tokens/revoke", {"token_id": t["id"]})
+            revoked += 1
+    if revoked:
+        print(f"[bridge] revoked {revoked} stale bridge token(s) for {uid}", file=sys.stderr, flush=True)
     _, new = api("POST", f"/api/v4/users/{uid}/tokens", {"description": "bridge"})
     tok = (new or {}).get("token", "")
     if tok:
