@@ -26,6 +26,10 @@ spec:
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       restartPolicy: {{ .Values.job.restartPolicy }}
+      {{- with .Values.job.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: ansible-runner
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
