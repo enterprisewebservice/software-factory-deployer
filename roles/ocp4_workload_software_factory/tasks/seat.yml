@@ -13,6 +13,7 @@
       metadata:
         name: "{{ item.name }}"
         labels: "{{ item.labels }}"
+        annotations: "{{ item.annotations | default({}) }}"
   loop:
     - name: "{{ _seat_ns }}"
       labels:
@@ -20,6 +21,12 @@
         agentoffice.ai/chat-provisioning: enabled
         factory-hub.redhat.com/seat: "true"
         software-factory.redhat.com/seat: "{{ _seat }}"
+      # The operator reads who a workspace acts for from these two annotations; a
+      # ModelConnection is offered to a seat only when its access list names the user or
+      # one of these groups (reference cluster: attendees,<host>-attendees).
+      annotations:
+        agentoffice.ai/user: "{{ _seat }}"
+        agentoffice.ai/groups: "{{ workshop_attendees_group }},rhdp-attendees"
     - name: "showroom-{{ _seat }}"
       labels:
         software-factory.redhat.com/seat: "{{ _seat }}"

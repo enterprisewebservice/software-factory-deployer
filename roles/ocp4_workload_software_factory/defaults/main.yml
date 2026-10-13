@@ -12,7 +12,7 @@ sovereign_vllm: false                 # also serve an in-cluster model and regis
 sovereign_vllm_model: ""              # model id when sovereign_vllm is true (GPU node required)
 
 # agent-office operator (values from the reference cluster)
-agent_office_catalog_image: ""        # TODO pin: quay.io/deanpeterson/agent-office-operator-catalog:<tag>
+agent_office_catalog_image: ""        # the chart pins it: quay.io/dpeterso/agent-office-operator-catalog:<tag>
 agent_office_channel: alpha
 mcp_gateway_channel: preview
 eso_channel: stable
@@ -104,6 +104,7 @@ keycloak_realm: "{{ keycloak_realm_fallback }}"
 
 # Agent platform
 agent_office_console_plugin_image: quay.io/dpeterso/agent-office-plugin:v0.0.6
+openclaw_image: quay.io/dpeterso/openclaw:v2026.7.1   # rewritten into the mirrored hire template; same tag as the operator default
 agent_registry_urls: https://mindifact.ai/v1/index.json
 workshop_openshift_group: redhat-workshop-users
 

@@ -86,6 +86,24 @@
         csv_operator: agent-office-operator
         csv_namespace: agent-office-operator
 
+    # OLM installs the bundle's Service under the kustomize-prefixed name
+    # (agent-office-operator-agent-office-backstage-catalog); the Developer Hub proxy
+    # entries of the binders plugin target agent-office-backstage-catalog, the name the
+    # reference cluster carries as a second Service. Same selector, same port.
+    - name: platform | catalog Service under the name the Developer Hub proxy targets
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: agent-office-backstage-catalog
+            namespace: agent-office-operator
+            labels: { app.kubernetes.io/component: backstage-catalog, app.kubernetes.io/name: agent-office-operator }
+          spec:
+            ports: [{ name: http, port: 80, protocol: TCP, targetPort: backstage-cat }]
+            selector: { app.kubernetes.io/name: agent-office-operator, control-plane: controller-manager }
+
     - name: platform | console plugin (Service, Deployment, ConsolePlugin)
       kubernetes.core.k8s:
         state: present

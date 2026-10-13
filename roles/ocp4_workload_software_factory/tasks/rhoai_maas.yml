@@ -61,6 +61,11 @@
           kind: ModelConnection
           metadata:
             name: rhdp-litemaas
+            # The hiring form pre-selects the default-brain connection for a user who may
+            # see it; without it an attendee's form opens on the platform Codex preset,
+            # which this cluster does not have.
+            annotations:
+              agentoffice.ai/default-brain: "true"
           spec:
             displayName: "Workshop model ({{ maas_external_provider_model }})"
             description: "The model endpoint RHDP issued with this order (LiteMaaS). Shared key, 7-day validity."

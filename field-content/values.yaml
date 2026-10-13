@@ -51,7 +51,7 @@ ansible:
     software_factory_stages: "operators,gitea,keycloak_users,rhdh,agent_platform,rhoai_maas,mattermost,seats,mcp_gateway,showroom,verify,userinfo"
     # Empty = the agent-office operator is skipped. Set to a catalog image the ordered cluster
     # can pull (the reference cluster's images are in its own Quay today).
-    agent_office_catalog_image: ""
+    agent_office_catalog_image: quay.io/dpeterso/agent-office-operator-catalog:v1.7.80
     model_access: maas
     showroom_content_repo: "https://github.com/enterprisewebservice/showroom-openshift-software-factory.git"
     showroom_content_ref: "main"

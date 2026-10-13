@@ -122,6 +122,24 @@
     regexp: "^  title: OpenClaw Agent \\(GitHub direct\\)$"
     replace: "  title: OpenClaw Agent"
 
+# The skeleton pins the OpenClaw runtime image of the reference cluster's own Quay, which
+# an ordered cluster cannot reach. Every hire (gateway and workstation) takes the published
+# image instead; the operator's built-in default is the same tag.
+- name: rhdh gitea templates | hires run the published OpenClaw image
+  ansible.builtin.replace:
+    path: "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent/skeleton/base/{{ item }}"
+    regexp: "^(\\s+)image: \\S+/openclaw:\\S+$"
+    replace: "\\1image: {{ openclaw_image }}"
+  loop: [agentgateway.yaml, agentworkstation.yaml]
+
+- name: rhdh gitea templates | verify the image rewrite landed exactly once per manifest
+  ansible.builtin.command:
+    argv: [grep, -c, "image: {{ openclaw_image }}", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent/skeleton/base/{{ item }}"]
+  loop: [agentgateway.yaml, agentworkstation.yaml]
+  register: r_image_check
+  failed_when: r_image_check.stdout != "1"
+  changed_when: false
+
 - name: rhdh gitea templates | verify the rewrite landed exactly once
   ansible.builtin.command:
     argv: [grep, -c, "default: '{{ gitea_host }}'", "{{ r_tpl_dir.path }}/src/samples/templates/openclaw-agent-genesis/template.yaml"]
