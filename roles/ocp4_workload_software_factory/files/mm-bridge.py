@@ -271,26 +271,34 @@ BOT_TOKENS = {}  # bot user id -> personal access token (one per bridge life)
 def bot_token(uid):
     """The bot's access token, minted ONCE per bridge life. Rediscovery rebuilds every
     agent record every REDISCOVER seconds; minting there left each agent user with a
-    new token per minute, forever (200+ per agent on the reference cluster, found
-    2026-10-13). The first mint also revokes the pile earlier bridge lives left behind."""
+    new token per minute, forever (10,000+ per agent on the reference cluster, found
+    2026-10-13). The pile earlier bridge lives left behind is revoked in the background,
+    page by page, so a long-lived bot never blocks the bridge's first discovery."""
     tok = BOT_TOKENS.get(uid)
     if tok:
         return tok
-    revoked = 0
-    for _ in range(50):  # pages of 200; the pile on a long-lived bridge ran past 400
-        st, old = api("GET", f"/api/v4/users/{uid}/tokens?page=0&per_page=200")
-        stale = [t for t in (old or []) if st == 200 and t.get("description") == "bridge"]
-        if not stale:
-            break
-        for t in stale:
-            api("POST", "/api/v4/users/tokens/revoke", {"token_id": t["id"]})
-            revoked += 1
-    if revoked:
-        print(f"[bridge] revoked {revoked} stale bridge token(s) for {uid}", file=sys.stderr, flush=True)
     _, new = api("POST", f"/api/v4/users/{uid}/tokens", {"description": "bridge"})
     tok = (new or {}).get("token", "")
-    if tok:
-        BOT_TOKENS[uid] = tok
+    if not tok:
+        return ""
+    BOT_TOKENS[uid] = tok
+    keep = (new or {}).get("id")
+
+    def sweep():
+        revoked = 0
+        while True:
+            st, old = api("GET", f"/api/v4/users/{uid}/tokens?page=0&per_page=200")
+            stale = [t for t in (old or []) if st == 200
+                     and t.get("description") == "bridge" and t.get("id") != keep]
+            if not stale:
+                break
+            for t in stale:
+                api("POST", "/api/v4/users/tokens/revoke", {"token_id": t["id"]})
+                revoked += 1
+        if revoked:
+            print(f"[bridge] revoked {revoked} stale bridge token(s) for {uid}", file=sys.stderr, flush=True)
+
+    threading.Thread(target=sweep, daemon=True).start()
     return tok
 
 
