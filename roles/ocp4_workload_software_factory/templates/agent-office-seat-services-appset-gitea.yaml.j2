@@ -12,6 +12,10 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: software-factory-deployer
 spec:
+  # A generator blip (Gitea restarting, a 5xx on a pathsExist check) must never take an
+  # attendee's agent or service down with the Application it generated.
+  syncPolicy:
+    preserveResourcesOnDeletion: true
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
