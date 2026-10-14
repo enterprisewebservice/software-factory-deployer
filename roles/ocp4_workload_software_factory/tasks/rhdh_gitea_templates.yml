@@ -15,6 +15,12 @@
 # relative ../openclaw-agent/skeleton resolves against the mirror through
 # the gitea integration (GiteaUrlReader implements readTree).
 
+# The mirror pushes with the Gitea admin credential and needs the route host; both come from
+# the gitea stage, derived here again so the rhdh stage is correct on its own.
+- name: rhdh gitea templates | Gitea facts (stand-alone run)
+  ansible.builtin.include_tasks: gitea_facts.yml
+  when: _gitea_api is not defined
+
 - name: rhdh gitea templates | preconditions
   ansible.builtin.assert:
     that:
