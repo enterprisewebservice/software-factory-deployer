@@ -122,10 +122,9 @@
 
 - name: gitea install | the app.ini this cluster should run
   ansible.builtin.set_fact:
-    _gitea_factory_ini: >-
-      {{ (r_gitea_cm.resources[0].data['app.ini'] | replace('[oauth2]\nENABLED = false', '[oauth2]\nENABLED = true'))
-         ~ ('' if '[repo-archive]' in r_gitea_cm.resources[0].data['app.ini']
-            else '\n[repo-archive]\nSTORAGE_TYPE = local\nPATH = ' ~ gitea_repo_archive_path ~ '\n') }}
+    # A double-quoted scalar: YAML turns the \n escapes into newlines before Jinja sees them (a
+    # folded scalar leaves them as two characters and nothing matches).
+    _gitea_factory_ini: "{{ (r_gitea_cm.resources[0].data['app.ini'] | replace('[oauth2]\nENABLED = false', '[oauth2]\nENABLED = true')) ~ ('' if '[repo-archive]' in r_gitea_cm.resources[0].data['app.ini'] else '\n[repo-archive]\nSTORAGE_TYPE = local\nPATH = ' ~ gitea_repo_archive_path ~ '\n') }}"
     _gitea_factory_current: "{{ (r_gitea_cm_factory.resources[0].data['app.ini'] | default('')) if (r_gitea_cm_factory.resources | length > 0) else '' }}"
   no_log: true
 
