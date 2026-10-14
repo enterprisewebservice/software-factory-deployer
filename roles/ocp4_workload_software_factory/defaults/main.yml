@@ -98,6 +98,10 @@ gitea_catalog_image_tag: v2.1.0
 gitea_operator_channel: stable
 gitea_image: quay.io/rhpds/gitea
 gitea_image_tag: "1.24.6"
+# Gitea's data directory is the container filesystem on this operator's pod; repository archives
+# (what the scaffolder's fetch:template downloads) live there and vanish on restart while the
+# database keeps their records, so they go on the repositories volume instead.
+gitea_repo_archive_path: /gitea-repositories/.repo-archive
 workshop_user_password: ""            # generated per order (workshop_password.yml) unless keycloak_user_password is set
 
 # Keycloak (RHDP base provides it; the chart passes the admin credentials)

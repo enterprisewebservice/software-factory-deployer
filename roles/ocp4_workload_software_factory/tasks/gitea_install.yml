@@ -93,25 +93,60 @@
 # The operator renders app.ini with the OAuth2 provider OFF, and Mattermost signs attendees
 # in through Gitea's OAuth2 (the authorize endpoint answers 403 while it is off). The
 # operator's hook for a custom app.ini is spec.giteaConfigMapName (+ giteaHostname, which
-# it insists on): the rendered config is copied once with [oauth2] ENABLED = true and the
-# instance is pointed at the copy, exactly the reference cluster's shape
-# (gitea-config-factory). Idempotent: an instance already on the copy is left alone.
-- name: gitea install | instance already on the OAuth2-enabled config?
+# it insists on): the rendered config is copied with [oauth2] ENABLED = true and the instance
+# is pointed at the copy, exactly the reference cluster's shape (gitea-config-factory).
+#
+# The copy also gets a [repo-archive] section on the repositories volume. The operator's pod
+# keeps Gitea's data directory on the container filesystem, so a restart lost every generated
+# repository archive while the database kept their records, and from then on the scaffolder's
+# fetch of the template skeleton answered 500 "no such file or directory" (found 13 October
+# 2026 after the OAuth2 switch restarted Gitea). gitea.yml purges the records on every run.
+#
+# Idempotent: the copy is re-rendered only when the desired text differs from what is applied
+# (or the instance does not point at it), and only then does Gitea restart.
+- name: gitea install | the operator-rendered app.ini
+  kubernetes.core.k8s_info:
+    kind: ConfigMap
+    name: gitea-config
+    namespace: "{{ gitea_namespace }}"
+  register: r_gitea_cm
+  no_log: true
+
+- name: gitea install | the applied copy, if any
+  kubernetes.core.k8s_info:
+    kind: ConfigMap
+    name: gitea-config-factory
+    namespace: "{{ gitea_namespace }}"
+  register: r_gitea_cm_factory
+  no_log: true
+
+- name: gitea install | the app.ini this cluster should run
   ansible.builtin.set_fact:
-    _gitea_oauth2_done: "{{ (r_gitea_status.resources[0].spec.giteaConfigMapName | default('')) == 'gitea-config-factory' }}"
+    _gitea_factory_ini: >-
+      {{ (r_gitea_cm.resources[0].data['app.ini'] | replace('[oauth2]\nENABLED = false', '[oauth2]\nENABLED = true'))
+         ~ ('' if '[repo-archive]' in r_gitea_cm.resources[0].data['app.ini']
+            else '\n[repo-archive]\nSTORAGE_TYPE = local\nPATH = ' ~ gitea_repo_archive_path ~ '\n') }}
+    _gitea_factory_current: "{{ (r_gitea_cm_factory.resources[0].data['app.ini'] | default('')) if (r_gitea_cm_factory.resources | length > 0) else '' }}"
+  no_log: true
 
-- name: gitea install | OAuth2-enabled config
-  when: not (_gitea_oauth2_done | bool)
+- name: gitea install | configuration change needed?
+  ansible.builtin.set_fact:
+    _gitea_config_change: >-
+      {{ (_gitea_factory_current != _gitea_factory_ini)
+         or ((r_gitea_status.resources[0].spec.giteaConfigMapName | default('')) != 'gitea-config-factory') }}
+
+- name: gitea install | OAuth2-enabled config with persistent archives
+  when: _gitea_config_change | bool
   block:
-    - name: gitea install | the operator-rendered app.ini
+    - name: gitea install | the Deployment and its pods before the change
       kubernetes.core.k8s_info:
-        kind: ConfigMap
-        name: gitea-config
+        api_version: apps/v1
+        kind: Deployment
+        name: gitea
         namespace: "{{ gitea_namespace }}"
-      register: r_gitea_cm
-      no_log: true
+      register: r_gitea_dep_before
 
-    - name: gitea install | the same app.ini with the OAuth2 provider on
+    - name: gitea install | the app.ini copy
       kubernetes.core.k8s:
         state: present
         definition:
@@ -122,7 +157,7 @@
             namespace: "{{ gitea_namespace }}"
             labels: { app.kubernetes.io/managed-by: software-factory-deployer }
           data:
-            app.ini: "{{ r_gitea_cm.resources[0].data['app.ini'] | replace('[oauth2]\nENABLED = false', '[oauth2]\nENABLED = true') }}"
+            app.ini: "{{ _gitea_factory_ini }}"
       no_log: true
 
     - name: gitea install | point the instance at it
@@ -137,7 +172,26 @@
             giteaConfigMapName: gitea-config-factory
             giteaHostname: "{{ gitea_host }}"
 
-    - name: gitea install | wait for the instance to roll onto the OAuth2-enabled config
+    # A new pod mounts the current copy; when the instance already pointed at the copy, only
+    # its text changed and nothing restarts Gitea on its own.
+    - name: gitea install | pods running the old configuration
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ gitea_namespace }}"
+        label_selectors: "{{ (r_gitea_dep_before.resources[0].spec.selector.matchLabels | default({})) | dict2items | map(attribute='key') | zip((r_gitea_dep_before.resources[0].spec.selector.matchLabels | default({})) | dict2items | map(attribute='value')) | map('join', '=') | list }}"
+      register: r_gitea_old_pods
+      when: (r_gitea_dep_before.resources | length > 0) and (r_gitea_dep_before.resources[0].spec.template.spec.volumes | selectattr('name', 'equalto', 'gitea-config') | map(attribute='configMap.name') | first | default('')) == 'gitea-config-factory'
+
+    - name: gitea install | replace them
+      kubernetes.core.k8s:
+        state: absent
+        kind: Pod
+        name: "{{ item.metadata.name }}"
+        namespace: "{{ gitea_namespace }}"
+      loop: "{{ r_gitea_old_pods.resources | default([]) }}"
+      loop_control: { label: "{{ item.metadata.name }}" }
+
+    - name: gitea install | wait for the instance to run the copy
       kubernetes.core.k8s_info:
         api_version: apps/v1
         kind: Deployment

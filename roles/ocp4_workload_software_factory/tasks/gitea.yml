@@ -32,6 +32,20 @@
 - name: gitea | host, API and admin facts
   ansible.builtin.include_tasks: gitea_facts.yml
 
+# Archive records that outlived their files (a restart before the archives moved onto the
+# volume) make every scaffold fetch answer 500; archives regenerate on demand, so purging the
+# records is free. Gitea's admin cron task does it.
+- name: gitea | purge repository archive records (regenerated on demand)
+  ansible.builtin.uri:
+    url: "{{ _gitea_api }}/admin/cron/delete_repo_archives"
+    method: POST
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ _gitea_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [204]
+  no_log: true
+
 - name: gitea | ensure per-attendee users exist
   ansible.builtin.uri:
     url: "{{ _gitea_api }}/admin/users"
