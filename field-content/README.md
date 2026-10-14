@@ -11,7 +11,7 @@ This directory is the Helm chart that RHDP's **Field Sourced Content - OpenShift
 | OpenShift version | the newest offered (4.21 or later: OpenShift AI 3.x and the MCP gateway operator need it) |
 | Models-as-a-Service model | a Claude model. The order's LiteMaaS key becomes the default brain; the small open models in the list do not call tools reliably, and Modules 3 to 7 need tool calls |
 | Git repository URL | `https://github.com/enterprisewebservice/software-factory-deployer` |
-| Revision | `main` (or the branch under test) |
+| Revision | `field-content` (the branch every order so far used; `main` does not carry the chart yet) |
 | Path | `field-content` |
 
 RHDP creates Argo Application `field-content` in `openshift-gitops` (project `default`, no prune, no self-heal) and stops watching. From there the deployment is yours to read in Argo and OpenShift.
