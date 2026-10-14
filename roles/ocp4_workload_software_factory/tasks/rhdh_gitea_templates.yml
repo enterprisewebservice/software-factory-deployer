@@ -175,8 +175,11 @@
       cd "{{ r_tpl_dir.path }}/src"
       git -c user.name="software-factory-deployer" -c user.email="deployer@{{ gitea_host }}" \
         commit -am "workshop registration rewrite: giteaHost={{ gitea_host }} (gitProvider stays auto)"
-      git push --force \
-        "https://{{ gitea_admin_user }}:{{ r_gitea_token.json.sha1 }}@{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}.git" \
+      # The admin credential this file already uses, as a header: a token variable only
+      # existed when the gitea stage had just minted one, which it no longer does on re-runs.
+      git -c http.extraHeader="Authorization: Basic $(printf '%s:%s' '{{ gitea_admin_user }}' '{{ _gitea_admin_password }}' | base64 | tr -d '\n')" \
+        push --force \
+        "https://{{ gitea_host }}/{{ gitea_templates_org }}/{{ gitea_templates_repo }}.git" \
         HEAD:refs/heads/main
   no_log: true
 
