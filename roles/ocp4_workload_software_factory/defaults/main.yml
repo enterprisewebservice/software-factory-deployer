@@ -177,17 +177,24 @@ runner_node: ""                                       # the node the deployer Jo
 # the dev agent and the pipeline builds pull from, the registries buildah pulls base images from, and
 # the web search the runtime offers. Everything else is denied and logged on the node (ACL logging).
 egress_cage_enabled: true
-egress_cage_allowed_dns:          # outside the cluster; EgressFirewall dnsName rules (wildcards allowed)
+egress_cage_allowed_dns:          # outside the cluster; exact names (this OVN-Kubernetes rejects wildcards in EgressFirewall)
   - pypi.org
   - files.pythonhosted.org
   - registry.access.redhat.com
   - registry.redhat.io
+  - cdn.registry.redhat.io
+  - cdn01.registry.redhat.io
+  - cdn02.registry.redhat.io
+  - cdn03.registry.redhat.io
+  - cdn04.registry.redhat.io
+  - cdn05.registry.redhat.io
+  - cdn06.registry.redhat.io
+  - quay.io
   - cdn.quay.io
   - cdn01.quay.io
   - cdn02.quay.io
   - cdn03.quay.io
-  - quay.io
-  - api.duckduckgo.com
-  - html.duckduckgo.com
   - duckduckgo.com
+  - html.duckduckgo.com
   - lite.duckduckgo.com
+  - api.duckduckgo.com

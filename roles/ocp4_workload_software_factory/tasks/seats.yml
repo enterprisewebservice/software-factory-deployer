@@ -37,6 +37,19 @@
   ansible.builtin.set_fact:
     _chains_pub: "{{ (((r_seats_chains.resources | default([{}]))[0].data | default({}))['cosign.pub'] | default('')) | b64decode }}"
 
+- name: seats | cluster network (the cage's NetworkPolicy lets everything that is not the pod or service network through to the EgressFirewall)
+  kubernetes.core.k8s_info:
+    api_version: config.openshift.io/v1
+    kind: Network
+    name: cluster
+  register: r_seats_network
+
+- name: seats | cage facts
+  ansible.builtin.set_fact:
+    _cage_cluster_cidrs: "{{ (r_seats_network.resources[0].status.clusterNetwork | map(attribute='cidr') | list) + (r_seats_network.resources[0].status.serviceNetwork | list) }}"
+    # the cluster's own routes the agent and its pipeline runs reach by name: Gitea, the registry
+    _cage_route_hosts: "{{ ([gitea_host] if (gitea_host | default('') | length > 0) else []) + ([_quay_host] if (_quay_host | default('') | length > 0) else []) }}"
+
 - name: seats | per-seat workspaces
   ansible.builtin.include_tasks: seat.yml
   vars:

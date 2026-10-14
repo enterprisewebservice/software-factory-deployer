@@ -338,8 +338,9 @@
                   - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: "{{ gitea_namespace }}" } } }
                   - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: openshift-ingress } } }
                   - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: "{{ quay_namespace }}" } } }
-              # anything outside the cluster network: the EgressFirewall below decides
-              - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16] } }]
+              # anything that is not the pod or service network (the ingress address among it, even when
+              # private): the EgressFirewall below decides by name
+              - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: "{{ _cage_cluster_cidrs }}" } }]
 
     - name: "seat {{ _seat }} | cage: outside destinations (EgressFirewall, deny the rest)"
       kubernetes.core.k8s:
@@ -353,11 +354,12 @@
             labels: { app.kubernetes.io/managed-by: software-factory-deployer, software-factory.redhat.com/seat: "{{ _seat }}" }
           spec:
             egress: >-
-              {{ ([{'type': 'Allow', 'to': {'dnsName': '*.' ~ cluster_domain}}]
-                  + ([{'type': 'Allow', 'to': {'dnsName': (maas_external_provider_url | regex_replace('^https?://', '') | regex_replace('[:/].*$', ''))}}]
-                     if (maas_external_provider_url | default('') | length > 0) else [])
-                  + (egress_cage_allowed_dns | map('community.general.dict_kv', 'dnsName') | map('community.general.dict_kv', 'to') | map('combine', {'type': 'Allow'}) | list)
-                  + [{'type': 'Deny', 'to': {'cidrSelector': '0.0.0.0/0'}}]) }}
+              {{ ((_cage_route_hosts
+                   + ([maas_external_provider_url | regex_replace('^https?://', '') | regex_replace('[:/].*$', '')]
+                      if (maas_external_provider_url | default('') | length > 0) else [])
+                   + egress_cage_allowed_dns)
+                  | map('community.general.dict_kv', 'dnsName') | map('community.general.dict_kv', 'to') | map('combine', {'type': 'Allow'}) | list)
+                 + [{'type': 'Deny', 'to': {'cidrSelector': '0.0.0.0/0'}}] }}
 
     - name: "seat {{ _seat }} | cage: denied connections are logged on the node"
       kubernetes.core.k8s:
