@@ -48,6 +48,11 @@ spec:
           value: "/tmp/ansible/ansible.cfg"
         - name: KUBECONFIG
           value: "/tmp/ansible/kubeconfig"
+        # The kata stage converts a worker other than the one running this Job.
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         # Clone the same repository and revision RHDP was given (gitops.* is injected by the
         # field-content workload); fall back to the values for local renders.
         - name: GIT_REPO_URL
@@ -152,7 +157,7 @@ spec:
             pip install --quiet -r requirements.txt
           fi
 
-          EXTRA_VARS="cluster_domain=${CLUSTER_DOMAIN} cluster_api_url=${CLUSTER_API_URL} runner_namespace=${NAMESPACE}"
+          EXTRA_VARS="cluster_domain=${CLUSTER_DOMAIN} cluster_api_url=${CLUSTER_API_URL} runner_namespace=${NAMESPACE} runner_node=${NODE_NAME}"
           {{- range $key, $value := .Values.ansible.extraVars }}
           EXTRA_VARS="$EXTRA_VARS {{ $key }}={{ $value }}"
           {{- end }}

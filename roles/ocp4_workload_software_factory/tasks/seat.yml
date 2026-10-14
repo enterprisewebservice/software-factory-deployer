@@ -303,3 +303,68 @@
     status_code: [200]
   when: (r_seat_hooks.status | default(0)) == 200 and _seat_pac_hooks | length > 0
   no_log: true
+
+# ---- Module 8's cage: default-deny egress with the platform's destinations allowed ------------------
+# Two layers, both OVN-Kubernetes: a NetworkPolicy for what lives inside the cluster (selected by
+# namespace) and an EgressFirewall for what lives outside (by DNS name; the cluster's own routes
+# resolve to the ingress address, outside the pod network, so they are allowed by wildcard name).
+# Denied connections are logged on the node (the namespace's ACL-logging annotation).
+- name: "seat {{ _seat }} | egress cage"
+  when: egress_cage_enabled | bool
+  block:
+    - name: "seat {{ _seat }} | cage: in-cluster destinations (NetworkPolicy)"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: seat-egress
+            namespace: "{{ _seat_ns }}"
+            labels: { app.kubernetes.io/managed-by: software-factory-deployer, software-factory.redhat.com/seat: "{{ _seat }}" }
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+              # cluster DNS
+              - to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: openshift-dns } } }]
+                ports: [{ protocol: UDP, port: 5353 }, { protocol: TCP, port: 5353 }, { protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+              # the seat itself (the shipped service, the agent's own gateway)
+              - to: [{ podSelector: {} }]
+              # the platform: MCP gateway, orders-api, model proxy, Gitea, the chat bridge's namespace
+              - to:
+                  - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: "{{ ocp4_workload_software_factory_namespace }}" } } }
+                  - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: "{{ model_desk_namespace }}" } } }
+                  - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: "{{ gitea_namespace }}" } } }
+                  - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: openshift-ingress } } }
+                  - { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: "{{ quay_namespace }}" } } }
+              # anything outside the cluster network: the EgressFirewall below decides
+              - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16] } }]
+
+    - name: "seat {{ _seat }} | cage: outside destinations (EgressFirewall, deny the rest)"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: k8s.ovn.org/v1
+          kind: EgressFirewall
+          metadata:
+            name: default
+            namespace: "{{ _seat_ns }}"
+            labels: { app.kubernetes.io/managed-by: software-factory-deployer, software-factory.redhat.com/seat: "{{ _seat }}" }
+          spec:
+            egress: >-
+              {{ ([{'type': 'Allow', 'to': {'dnsName': '*.' ~ cluster_domain}}]
+                  + ([{'type': 'Allow', 'to': {'dnsName': (maas_external_provider_url | regex_replace('^https?://', '') | regex_replace('[:/].*$', ''))}}]
+                     if (maas_external_provider_url | default('') | length > 0) else [])
+                  + (egress_cage_allowed_dns | map('community.general.dict_kv', 'dnsName') | map('community.general.dict_kv', 'to') | map('combine', {'type': 'Allow'}) | list)
+                  + [{'type': 'Deny', 'to': {'cidrSelector': '0.0.0.0/0'}}]) }}
+
+    - name: "seat {{ _seat }} | cage: denied connections are logged on the node"
+      kubernetes.core.k8s:
+        state: patched
+        kind: Namespace
+        name: "{{ _seat_ns }}"
+        definition:
+          metadata:
+            annotations:
+              k8s.ovn.org/acl-logging: '{"deny": "alert"}'

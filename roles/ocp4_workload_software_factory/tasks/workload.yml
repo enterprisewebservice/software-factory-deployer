@@ -13,6 +13,8 @@
 
 - ansible.builtin.include_tasks: operators.yml
   when: "'operators' in _stages"
+- ansible.builtin.include_tasks: kata.yml
+  when: "'kata' in _stages and kata_enabled | bool"
 - ansible.builtin.include_tasks: gitea.yml
   when: "'gitea' in _stages"
 - ansible.builtin.include_tasks: gitops.yml

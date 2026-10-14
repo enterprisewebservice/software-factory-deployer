@@ -43,6 +43,8 @@
           {'name': 'mcp-gateway', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': mcp_gateway_channel}
         ] + ([{'name': 'quay-operator', 'ns': 'openshift-operators', 'source': 'redhat-operators', 'channel': quay_operator_channel}]
              if 'quay' in _stages else [])
+          + ([{'name': 'sandboxed-containers-operator', 'ns': kata_operator_namespace, 'source': 'redhat-operators', 'channel': kata_operator_channel}]
+             if ('kata' in _stages and kata_enabled | bool) else [])
           + ([{'name': 'agent-office-operator', 'ns': 'agent-office-operator', 'source': 'agent-office-operator-catalog', 'channel': agent_office_channel, 'env': _agent_office_env}]
              if agent_office_catalog_image | length > 0 else [])
       }}
@@ -77,6 +79,17 @@
 - name: operators | already installed by the base (skipped)
   ansible.builtin.debug:
     msg: "{{ _subscriptions | map(attribute='name') | select('in', _installed_packages) | list }}"
+
+# OpenShift sandboxed containers installs in its own namespace (OwnNamespace install mode).
+- name: operators | sandboxed-containers operator namespace and OperatorGroup
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ item }}"
+  loop:
+    - { apiVersion: v1, kind: Namespace, metadata: { name: "{{ kata_operator_namespace }}" } }
+    - { apiVersion: operators.coreos.com/v1, kind: OperatorGroup, metadata: { name: sandboxed-containers-operator, namespace: "{{ kata_operator_namespace }}" }, spec: { targetNamespaces: ["{{ kata_operator_namespace }}"] } }
+  loop_control: { label: "{{ item.kind }}" }
+  when: "'kata' in _stages and kata_enabled | bool and 'sandboxed-containers-operator' not in _installed_packages"
 
 - name: operators | agent-office operator namespace and OperatorGroup (AllNamespaces, as on the reference cluster)
   kubernetes.core.k8s:
@@ -131,6 +144,13 @@
 - name: operators | wait for the CSVs of the subscriptions this run created
   ansible.builtin.include_tasks: wait_for_csv.yml
   loop: "{{ ['openshift-gitops-operator', 'openshift-pipelines-operator-rh', 'rhods-operator', 'quay-operator', 'agent-office-operator'] | reject('in', _installed_packages) | select('in', _subscriptions | map(attribute='name') | list) | list }}"
+  loop_control: { loop_var: csv_operator }
+
+- name: operators | wait for the sandboxed-containers CSV (its own namespace)
+  ansible.builtin.include_tasks: wait_for_csv.yml
+  vars:
+    csv_namespace: "{{ kata_operator_namespace }}"
+  loop: "{{ ['sandboxed-containers-operator'] | select('in', _subscriptions | map(attribute='name') | list) | list }}"
   loop_control: { loop_var: csv_operator }
 
 # The registry instance goes in now so postgres, redis, the bucket and the app initialise

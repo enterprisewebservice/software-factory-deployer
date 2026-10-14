@@ -1,0 +1,84 @@
+---
+# kata stage (Module 8, the VM boundary): one worker runs the kata RuntimeClass.
+#
+# OpenShift sandboxed containers converts the nodes a KataConfig selects: the operator rolls a
+# MachineConfig onto them and each reboots once. One worker is enough for a workshop (an agent
+# moved onto kata lands there through the RuntimeClass's node selector) and keeps the reboot
+# away from everything else. The worker is the last by name among workers that are not the
+# node running the deployer Job; the choice is recorded as a node label so re-runs are stable.
+- name: kata | workers
+  kubernetes.core.k8s_info:
+    kind: Node
+    label_selectors: ["node-role.kubernetes.io/worker"]
+  register: r_kata_nodes
+
+- name: kata | the worker already chosen, if any
+  ansible.builtin.set_fact:
+    _kata_chosen: "{{ r_kata_nodes.resources | selectattr('metadata.labels', 'defined') | selectattr('metadata.labels.' ~ kata_node_label, 'defined') | map(attribute='metadata.name') | list }}"
+  failed_when: false
+
+- name: kata | pick a worker (not the Job's own node, not a control-plane node)
+  ansible.builtin.set_fact:
+    _kata_node: >-
+      {{ (_kata_chosen | default([]) | first) if (_kata_chosen | default([]) | length > 0) else
+         (r_kata_nodes.resources | map(attribute='metadata.name') | reject('equalto', runner_node)
+          | reject('search', 'control-plane|master') | sort | last) }}
+
+- name: kata | no eligible worker
+  ansible.builtin.fail:
+    msg: "no worker to convert (workers: {{ r_kata_nodes.resources | map(attribute='metadata.name') | list }}, runner: {{ runner_node }})"
+  when: (_kata_node | default('')) | length == 0
+
+- name: kata | label {{ _kata_node }}
+  kubernetes.core.k8s:
+    state: patched
+    kind: Node
+    name: "{{ _kata_node }}"
+    definition:
+      metadata:
+        # a Jinja expression, not a templated key: Ansible does not render mapping keys
+        labels: "{{ {kata_node_label: 'true'} }}"
+
+- name: kata | KataConfig for the labelled worker
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: kataconfiguration.openshift.io/v1
+      kind: KataConfig
+      metadata:
+        name: example-kataconfig
+        labels: { app.kubernetes.io/managed-by: software-factory-deployer }
+      spec:
+        checkNodeEligibility: false
+        enablePeerPods: false
+        logLevel: info
+        kataConfigPoolSelector:
+          matchLabels: "{{ {kata_node_label: 'true'} }}"
+
+- name: kata | wait for the roll (MachineConfig, one reboot; up to {{ kata_rollout_timeout }}s)
+  kubernetes.core.k8s_info:
+    api_version: kataconfiguration.openshift.io/v1
+    kind: KataConfig
+    name: example-kataconfig
+  register: r_kataconfig
+  retries: "{{ ((kata_rollout_timeout | int) / 30) | round(0, 'ceil') | int }}"
+  delay: 30
+  until: >-
+    r_kataconfig.resources | length > 0
+    and (r_kataconfig.resources[0].status.kataNodes.installed | default([]) | length) >= 1
+    and not (r_kataconfig.resources[0].status.conditions | default([]) | selectattr('type', 'equalto', 'InProgress')
+             | selectattr('status', 'equalto', 'True') | list | length)
+
+- name: kata | the RuntimeClass exists
+  kubernetes.core.k8s_info:
+    api_version: node.k8s.io/v1
+    kind: RuntimeClass
+    name: kata
+  register: r_kata_rc
+  retries: 20
+  delay: 15
+  until: r_kata_rc.resources | length > 0
+
+- name: kata | done
+  ansible.builtin.debug:
+    msg: "kata RuntimeClass on {{ r_kataconfig.resources[0].status.kataNodes.installed | join(', ') }} (handler {{ r_kata_rc.resources[0].handler }})"

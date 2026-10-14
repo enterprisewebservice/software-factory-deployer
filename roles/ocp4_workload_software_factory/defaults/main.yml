@@ -81,7 +81,7 @@ keycloak_user_password: ""            # generated per-order (lookup('password', 
 
 # Stage selection. A list, or a comma-separated string when passed as an extra-var (the Field
 # Content Job does that). The first RHDP order runs: operators,showroom,userinfo
-software_factory_stages: [operators, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, quay, seats, mcp_gateway, model_desk, showroom, verify, userinfo]
+software_factory_stages: [operators, kata, gitea, gitops, keycloak_users, rhdh, agent_platform, rhoai_maas, mattermost, quay, seats, mcp_gateway, model_desk, showroom, verify, userinfo]
 cluster_domain: ""                    # derived from ingresses.config.openshift.io/cluster when empty
 
 # Showroom: one lab guide per seat (user1..N), the RHDP multi-user model
@@ -157,3 +157,37 @@ cosign_python: python3                  # interpreter carrying cryptography + py
 # The guide's defaults when the registry stage did not run (the reference cluster's values).
 reference_artifact_registry: quay-quay-quay-test.apps.salamander.aimlworkbench.com
 reference_registry_org: deanpeterson
+
+# --- Module 8: the VM boundary (OpenShift sandboxed containers) ---------------------------------
+# One worker is converted to run the kata RuntimeClass at order time (its MachineConfig rolls and
+# the node reboots once, before any workload exists); an attendee then moves their agent's gateway
+# onto it with one line of git (spec.runtimeClassName: kata, operator >= v1.7.83). The worker is
+# chosen deterministically among workers that are not running the deployer Job (runner_node).
+kata_enabled: true
+kata_operator_channel: stable
+kata_operator_namespace: openshift-sandboxed-containers-operator
+kata_node_label: software-factory.redhat.com/kata      # value "true" on the converted worker
+kata_rollout_timeout: 1800                            # seconds for the MachineConfig roll + reboot
+runner_node: ""                                       # the node the deployer Job runs on (Job env NODE_NAME)
+
+# --- Module 8: the egress cage (seat namespaces) --------------------------------------------------
+# Default-deny egress for every seat, with the platform's own destinations allowed: cluster DNS, the
+# platform namespace (MCP gateway, orders-api), the model proxy, Gitea, the cluster's routes (through
+# the ingress router, by wildcard DNS name), the model endpoint the order issued, the package index
+# the dev agent and the pipeline builds pull from, the registries buildah pulls base images from, and
+# the web search the runtime offers. Everything else is denied and logged on the node (ACL logging).
+egress_cage_enabled: true
+egress_cage_allowed_dns:          # outside the cluster; EgressFirewall dnsName rules (wildcards allowed)
+  - pypi.org
+  - files.pythonhosted.org
+  - registry.access.redhat.com
+  - registry.redhat.io
+  - cdn.quay.io
+  - cdn01.quay.io
+  - cdn02.quay.io
+  - cdn03.quay.io
+  - quay.io
+  - api.duckduckgo.com
+  - html.duckduckgo.com
+  - duckduckgo.com
+  - lite.duckduckgo.com
